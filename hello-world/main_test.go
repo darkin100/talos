@@ -13,6 +13,7 @@ func newTestServer() http.Handler {
 	s := newStore()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealth)
+	mux.HandleFunc("/todos/search", handleSearch(s))
 	mux.Handle("/todos", handleTodos(s))
 	mux.Handle("/todos/", handleTodos(s))
 	return mux
@@ -120,6 +121,46 @@ func TestBadRequests(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestSearch(t *testing.T) {
+	srv := newTestServer()
+
+	// Seed two todos.
+	for _, title := range []string{"write talk", "buy groceries"} {
+		body := strings.NewReader(`{"title":"` + title + `"}`)
+		req := httptest.NewRequest(http.MethodPost, "/todos", body)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+	}
+
+	// Empty query returns no results (avoids duplicating /todos).
+	req := httptest.NewRequest(http.MethodGet, "/todos/search?q=", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("empty search: expected 200, got %d", rec.Code)
+	}
+	var empty []Todo
+	_ = json.NewDecoder(rec.Body).Decode(&empty)
+	if len(empty) != 0 {
+		t.Fatalf("expected 0 results for empty query, got %d", len(empty))
+	}
+
+	// Case-insensitive match.
+	req = httptest.NewRequest(http.MethodGet, "/todos/search?q=TALK", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search: expected 200, got %d", rec.Code)
+	}
+	var hits []Todo
+	if err := json.NewDecoder(rec.Body).Decode(&hits); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(hits) != 1 || hits[0].Title != "write talk" {
+		t.Fatalf("expected one hit 'write talk', got %+v", hits)
 	}
 }
 
