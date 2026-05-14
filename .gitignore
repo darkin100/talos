@@ -1,0 +1,5 @@
+.logs/
+RELEASE_NOTES.md
+*.local
+.env
+.DS_Store

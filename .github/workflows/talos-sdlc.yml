@@ -1,0 +1,142 @@
+name: Talos SDLC
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  pr-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      verdict: ${{ steps.summary.outputs.verdict }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build agent images
+        run: |
+          docker build -t talos/code-review:v1 ./code-review-agent
+          docker build -t talos/security-review:v1 ./security-review-agent
+
+      - name: Run code-review agent
+        id: code_review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          docker run --rm \
+            -e GITHUB_TOKEN \
+            -e GITHUB_REPOSITORY=${{ github.repository }} \
+            -e PR_NUMBER=${{ github.event.pull_request.number }} \
+            -e OPENROUTER_API_KEY \
+            talos/code-review:v1
+
+      - name: Run security-review agent
+        id: security_review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          docker run --rm \
+            -e GITHUB_TOKEN \
+            -e GITHUB_REPOSITORY=${{ github.repository }} \
+            -e PR_NUMBER=${{ github.event.pull_request.number }} \
+            -e OPENROUTER_API_KEY \
+            talos/security-review:v1
+
+      - name: Summarise
+        id: summary
+        run: echo "verdict=pass" >> "$GITHUB_OUTPUT"
+
+  auto-merge:
+    needs: pr-review
+    if: github.event_name == 'pull_request' && needs.pr-review.outputs.verdict == 'pass'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auto-merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --squash --auto
+
+  deploy-and-verify:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build agent images
+        run: |
+          docker build -t talos/release-notes:v1 ./release-notes
+          docker build -t talos/rca:v1 ./rca-agent
+
+      - name: Deploy stack (Phoenix + Todo API)
+        run: |
+          docker compose -f observ/docker-compose.yml up -d --build
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/healthz; then
+              echo "todo-api is up"; break
+            fi
+            sleep 2
+          done
+
+      - name: Smoke traffic
+        run: |
+          curl -fsS -X POST http://localhost:8080/todos -d '{"title":"demo"}' -H 'content-type: application/json'
+          curl -fsS http://localhost:8080/todos
+
+      - name: Resolve merged PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=$(gh pr list --repo ${{ github.repository }} --state merged --search "${{ github.sha }}" --json number --jq '.[0].number // empty')
+          echo "number=${PR}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        if: steps.pr.outputs.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -e GITHUB_TOKEN \
+            -e GITHUB_REPOSITORY=${{ github.repository }} \
+            -e PR_NUMBER=${{ steps.pr.outputs.number }} \
+            -e OPENROUTER_API_KEY \
+            talos/release-notes:v1
+
+      - name: Capture application logs
+        run: |
+          mkdir -p .logs
+          docker logs talos-todo > .logs/app.log 2>&1 || true
+
+      - name: Run RCA agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/hello-world:/workspace:ro" \
+            -v "${{ github.workspace }}/.logs:/logs:ro" \
+            --network talos_talos-net \
+            -e GITHUB_TOKEN \
+            -e GITHUB_REPOSITORY=${{ github.repository }} \
+            -e OPENROUTER_API_KEY \
+            -e PHOENIX_URL=http://phoenix:6006 \
+            -e COMMIT_SHA=${{ github.sha }} \
+            -e PR_NUMBER=${{ steps.pr.outputs.number }} \
+            talos/rca:v1
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f observ/docker-compose.yml down -v

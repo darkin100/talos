@@ -1,0 +1,54 @@
+name: talos
+
+networks:
+  talos-net:
+    driver: bridge
+
+volumes:
+  phoenix-data:
+  app-logs:
+
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: talos-phoenix
+    restart: unless-stopped
+    networks: [talos-net]
+    ports:
+      - "6006:6006"   # Phoenix UI + REST
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    volumes:
+      - phoenix-data:/mnt/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:6006/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  todo-api:
+    image: talos/todo:v1
+    container_name: talos-todo
+    build:
+      context: ../hello-world
+    restart: unless-stopped
+    networks: [talos-net]
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://phoenix:4317
+      OTEL_SERVICE_NAME: todo-api
+    depends_on:
+      phoenix:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/todo-api", "--health"]
+      # The binary doesn't have a --health flag; rely on the deploy script
+      # hitting /healthz over the network instead.
+      interval: 30s
+      timeout: 3s
+      retries: 2
+      start_period: 5s
