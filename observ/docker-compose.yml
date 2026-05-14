@@ -23,10 +23,16 @@ services:
     volumes:
       - phoenix-data:/mnt/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:6006/healthz || exit 1"]
+      # The Phoenix image has python3 but no shell, curl or wget — use stdlib.
+      test:
+        - "CMD"
+        - "python3"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:6006/').status == 200 else 1)"
       interval: 10s
       timeout: 3s
       retries: 6
+      start_period: 10s
 
   todo-api:
     image: talos/todo:v1
@@ -44,11 +50,5 @@ services:
     depends_on:
       phoenix:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "/todo-api", "--health"]
-      # The binary doesn't have a --health flag; rely on the deploy script
-      # hitting /healthz over the network instead.
-      interval: 30s
-      timeout: 3s
-      retries: 2
-      start_period: 5s
+    # No in-container healthcheck: the distroless image has no shell or curl.
+    # The deploy script polls /healthz over the network instead.
