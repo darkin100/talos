@@ -6,14 +6,15 @@ focus of the demo remains on the agent harness, not the business logic.
 
 ## Endpoints
 
-| Method | Path           | Description           |
-|--------|----------------|-----------------------|
-| GET    | `/healthz`     | Health check          |
-| GET    | `/todos`       | List all todos        |
-| POST   | `/todos`       | Create a new todo     |
-| GET    | `/todos/{id}`  | Get a single todo     |
-| PUT    | `/todos/{id}`  | Update a todo         |
-| DELETE | `/todos/{id}`  | Delete a todo         |
+| Method | Path                | Description                          |
+|--------|---------------------|--------------------------------------|
+| GET    | `/healthz`          | Health check                         |
+| GET    | `/todos`            | List all todos                       |
+| POST   | `/todos`            | Create a new todo                    |
+| GET    | `/todos/search?q=`  | Case-insensitive title substring search |
+| GET    | `/todos/{id}`       | Get a single todo                    |
+| PUT    | `/todos/{id}`       | Update a todo                        |
+| DELETE | `/todos/{id}`       | Delete a todo                        |
 
 ## Run locally
 

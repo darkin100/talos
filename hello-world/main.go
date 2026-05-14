@@ -44,6 +44,24 @@ func (s *store) list() []Todo {
 	return out
 }
 
+// search returns todos whose Title contains the given query (case-insensitive).
+// An empty query returns no results to avoid duplicating the list endpoint.
+func (s *store) search(q string) []Todo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if q == "" {
+		return []Todo{}
+	}
+	needle := strings.ToLower(q)
+	out := make([]Todo, 0)
+	for _, t := range s.todos {
+		if strings.Contains(strings.ToLower(t.Title), needle) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 func (s *store) get(id int) (Todo, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -204,6 +222,17 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func handleSearch(s *store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		q := r.URL.Query().Get("q")
+		writeJSON(w, http.StatusOK, s.search(q))
+	}
+}
+
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -213,6 +242,7 @@ func main() {
 	s := newStore()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealth)
+	mux.HandleFunc("/todos/search", handleSearch(s))
 	mux.Handle("/todos", handleTodos(s))
 	mux.Handle("/todos/", handleTodos(s))
 
