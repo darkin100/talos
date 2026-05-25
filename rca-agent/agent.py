@@ -51,14 +51,30 @@ def _setup_arize_tracing(default_project: str) -> None:
     OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 
 
+def _flush_tracing() -> None:
+    """Force-flush queued spans so short-lived runs don't drop traces.
+
+    The BatchSpanProcessor (default in arize.otel) buffers spans; on a one-shot
+    agent run it may not drain before the process exits.
+    """
+    try:
+        from opentelemetry import trace
+
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "force_flush"):
+            provider.force_flush()
+    except Exception:
+        pass
+
+
 _setup_arize_tracing("talos-rca")
 
-import json
-import urllib.error
-import urllib.request
-from pathlib import Path
+import json  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from openai import OpenAI
+from openai import OpenAI  # noqa: E402
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -154,19 +170,11 @@ def gather_source_context(source_dir: Path, max_chars: int = 8000) -> str:
     return "".join(chunks)
 
 
-def call_llm(api_key: str, model: str, errors: list[dict], source: str) -> dict:
+def call_llm(client: OpenAI, model: str, errors: list[dict], source: str) -> dict:
     error_text = "\n".join(json.dumps(e) for e in errors[:20])
     user_prompt = (
         f"Error log entries (up to 20):\n{error_text}\n\n"
         f"Relevant source code:\n```go\n{source}\n```"
-    )
-    client = OpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=api_key,
-        default_headers={
-            "HTTP-Referer": "https://github.com/darkin100/talos",
-            "X-Title": "Talos RCA Agent",
-        },
     )
     response = client.chat.completions.create(
         model=model,
@@ -219,7 +227,15 @@ def main() -> int:
 
     print(f"[rca] {len(errors)} error events detected; performing RCA", flush=True)
     source = gather_source_context(source_dir)
-    analysis = call_llm(openrouter_key, model, errors, source)
+    client = OpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=openrouter_key,
+        default_headers={
+            "HTTP-Referer": "https://github.com/darkin100/talos",
+            "X-Title": "Talos RCA Agent",
+        },
+    )
+    analysis = call_llm(client, model, errors, source)
 
     title = analysis.get("title") or f"RCA: errors detected after deployment ({len(errors)} events)"
     body = analysis.get("body") or "(no body returned)"
@@ -234,4 +250,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        _flush_tracing()

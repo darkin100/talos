@@ -45,13 +45,29 @@ def _setup_arize_tracing(default_project: str) -> None:
     OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 
 
+def _flush_tracing() -> None:
+    """Force-flush queued spans so short-lived runs don't drop traces.
+
+    The BatchSpanProcessor (default in arize.otel) buffers spans; on a one-shot
+    agent run it may not drain before the process exits.
+    """
+    try:
+        from opentelemetry import trace
+
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "force_flush"):
+            provider.force_flush()
+    except Exception:
+        pass
+
+
 _setup_arize_tracing("talos-security-review")
 
-import json
-import urllib.error
-import urllib.request
+import json  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
 
-from openai import OpenAI
+from openai import OpenAI  # noqa: E402
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -98,15 +114,7 @@ def fetch_pr_diff(token: str, repo: str, pr_number: str) -> str:
     return http_request(f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}", headers=headers).decode("utf-8", "replace")
 
 
-def call_llm(api_key: str, model: str, diff: str) -> dict:
-    client = OpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=api_key,
-        default_headers={
-            "HTTP-Referer": "https://github.com/darkin100/talos",
-            "X-Title": "Talos Security Review Agent",
-        },
-    )
+def call_llm(client: OpenAI, model: str, diff: str) -> dict:
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -161,7 +169,15 @@ def main() -> int:
         print("[security-review] empty diff, skipping", flush=True)
         return 0
 
-    review = call_llm(openrouter_key, model, diff)
+    client = OpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=openrouter_key,
+        default_headers={
+            "HTTP-Referer": "https://github.com/darkin100/talos",
+            "X-Title": "Talos Security Review Agent",
+        },
+    )
+    review = call_llm(client, model, diff)
     verdict = review.get("verdict", "fail").lower()
     findings = review.get("findings", [])
 
@@ -187,4 +203,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        _flush_tracing()
