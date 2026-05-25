@@ -8,7 +8,7 @@
 import { createServer } from 'node:http';
 import { URL } from 'node:url';
 
-import handler from './api/handler.js';
+import handler from './api/[...slug].js';
 import { logEvent } from './lib/logging.js';
 
 const port = Number(process.env.PORT) || 3000;
