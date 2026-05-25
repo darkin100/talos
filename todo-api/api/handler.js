@@ -110,6 +110,13 @@ export default function handler(req, res) {
   let status = 500;
 
   try {
+    if (slug.length === 0) {
+      res.setHeader('content-type', 'text/plain');
+      res.status(200);
+      res.end('hello');
+      status = 200;
+      return;
+    }
     if (slug.length === 1 && slug[0] === 'healthz') {
       status = handleHealthz(req, res);
       return;

@@ -61,6 +61,10 @@ const server = createServer(async (req, res) => {
   req.query = Object.fromEntries(url.searchParams);
   const path = url.pathname;
 
+  if (path === '/') {
+    req.query.slug = [];
+    return handler(req, res);
+  }
   if (path.startsWith('/api/')) {
     req.query.slug = path.slice('/api/'.length).split('/').filter(Boolean);
     return handler(req, res);
