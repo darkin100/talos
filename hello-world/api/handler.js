@@ -2,9 +2,13 @@
 //
 // Why one file? Vercel deploys each file under `api/` as a separate
 // serverless function, so split per-route files do not share in-memory
-// state. A single catch-all keeps the demo's CRUD semantics intact within
+// state. A single function keeps the demo's CRUD semantics intact within
 // a warm function instance. State still resets on cold start; upgrade to
 // Vercel KV for real persistence.
+//
+// Routing: `vercel.json` rewrites every `/api/*` request to
+// `/api/handler?slug=*`. The dev-server.js shim builds the same `slug`
+// value locally so both code paths agree.
 
 import { store } from '../lib/store.js';
 import { logEvent } from '../lib/logging.js';
@@ -92,10 +96,16 @@ function handleTodoById(req, res, rawId) {
 
 export default function handler(req, res) {
   const start = Date.now();
-  // Vercel parses [...slug] into req.query.slug as an array. dev-server.js
-  // populates req.query.slug the same way for local parity.
-  const slugRaw = (req.query && req.query.slug) || [];
-  const slug = Array.isArray(slugRaw) ? slugRaw : [slugRaw];
+  // The `slug` value depends on the caller:
+  //   * Vercel rewrite (`source: /api/:path*` -> `dest: /api/handler?slug=:path*`)
+  //     delivers a slash-joined string like "todos/1".
+  //   * dev-server.js passes an array of segments for parity.
+  const slugRaw = (req.query && req.query.slug) || '';
+  const slug = Array.isArray(slugRaw)
+    ? slugRaw
+    : slugRaw
+      ? slugRaw.split('/').filter(Boolean)
+      : [];
   const path = '/api/' + slug.join('/');
   let status = 500;
 
