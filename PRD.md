@@ -226,9 +226,6 @@ talos/
 │   └── rca/
 │       ├── Dockerfile
 │       └── main.py (or Go)
-├── observ/
-│   ├── docker-compose.yml (Arize Phoenix + logging)
-│   └── config/
 ├── .github/
 │   └── workflows/
 │       └── talos-sdlc.yml (main workflow)

@@ -14,6 +14,9 @@ Environment:
     PHOENIX_URL           optional Phoenix base URL (e.g. http://phoenix:6006)
     COMMIT_SHA            optional sha to include in the issue body
     PR_NUMBER             optional PR number to cross-reference in the issue
+    ARIZE_SPACE_ID        (optional) Arize AX space id; enables tracing if set
+    ARIZE_API_KEY         (optional) Arize AX API key; required with ARIZE_SPACE_ID
+    ARIZE_PROJECT_NAME    (optional) Arize project name (default: talos-rca)
 
 Exit codes:
     0 = no errors observed
@@ -22,15 +25,43 @@ Exit codes:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
+
+
+def _setup_arize_tracing(default_project: str) -> None:
+    """Initialise Arize AX tracing for the OpenAI/OpenRouter client.
+
+    Must run before `openai` is imported so the instrumentor can patch the SDK.
+    No-ops if ARIZE_SPACE_ID/ARIZE_API_KEY are not set.
+    """
+    space_id = os.environ.get("ARIZE_SPACE_ID")
+    api_key = os.environ.get("ARIZE_API_KEY")
+    if not space_id or not api_key:
+        print("[rca] ARIZE_SPACE_ID/ARIZE_API_KEY not set; tracing disabled", flush=True)
+        return
+    from arize.otel import register
+    from openinference.instrumentation.openai import OpenAIInstrumentor
+
+    tracer_provider = register(
+        space_id=space_id,
+        api_key=api_key,
+        project_name=os.environ.get("ARIZE_PROJECT_NAME", default_project),
+    )
+    OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
+
+
+_setup_arize_tracing("talos-rca")
+
+import json
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+from openai import OpenAI
+
 GITHUB_API = "https://api.github.com"
-OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 SYSTEM_PROMPT = """You are a Site Reliability Engineer performing root-cause
 analysis. Given a set of error log lines and a snippet of the source code that
@@ -129,24 +160,23 @@ def call_llm(api_key: str, model: str, errors: list[dict], source: str) -> dict:
         f"Error log entries (up to 20):\n{error_text}\n\n"
         f"Relevant source code:\n```go\n{source}\n```"
     )
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": 0.2,
-        }
-    ).encode("utf-8")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/darkin100/talos",
-        "X-Title": "Talos RCA Agent",
-    }
-    raw = http_request(OPENROUTER_API, method="POST", headers=headers, body=body)
-    content = json.loads(raw)["choices"][0]["message"]["content"].strip()
+    client = OpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=api_key,
+        default_headers={
+            "HTTP-Referer": "https://github.com/darkin100/talos",
+            "X-Title": "Talos RCA Agent",
+        },
+    )
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+    )
+    content = (response.choices[0].message.content or "").strip()
     try:
         return json.loads(content)
     except json.JSONDecodeError:

@@ -29,5 +29,5 @@ docker run -p 8080:8080 talos/todo
 
 All logs are emitted as single-line JSON on stdout. Each log entry includes
 `timestamp`, `level`, `message`, and `service: todo-api`, plus request-scoped
-fields where applicable. This format is consumed by Arize Phoenix (see
-`../observ/`) and the RCA agent (see `../rca-agent/`).
+fields where applicable. This format is consumed by a hosted Arize Phoenix
+instance and the RCA agent (see `../rca-agent/`).
