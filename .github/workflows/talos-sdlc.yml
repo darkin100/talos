@@ -120,12 +120,19 @@ jobs:
       - name: Smoke deployment
         run: |
           URL="${{ steps.deploy.outputs.url }}"
+          healthy=false
           for i in $(seq 1 30); do
             if curl -fsS "$URL/api/healthz"; then
-              echo "todo-api is up at $URL"; break
+              echo "todo-api is up at $URL"
+              healthy=true
+              break
             fi
             sleep 2
           done
+          if [ "$healthy" != "true" ]; then
+            echo "todo-api never became healthy at $URL after 60s" >&2
+            exit 1
+          fi
           curl -fsS -X POST "$URL/api/todos" -H 'content-type: application/json' -d '{"title":"demo"}'
           curl -fsS "$URL/api/todos"
 

@@ -24,11 +24,7 @@ remains on the agent harness, not the business logic.
 ```
 hello-world/
 ├── api/
-│   ├── healthz.js
-│   ├── todos.js
-│   └── todos/
-│       ├── [id].js
-│       └── search.js
+│   └── [...slug].js  # single Vercel function — routes all /api/* internally
 ├── lib/
 │   ├── logging.js
 │   └── store.js
@@ -38,6 +34,14 @@ hello-world/
 ├── package.json
 └── vercel.json
 ```
+
+### Why one function instead of one per route?
+
+Vercel deploys each `api/*.js` file as a separate serverless function with
+its own process. Per-route files therefore can never share in-memory state
+— `POST /api/todos` (in `todos.js`) and `GET /api/todos/:id` (in `[id].js`)
+would each see an empty store. A single catch-all keeps CRUD intact within
+a warm function instance.
 
 ## Run locally
 

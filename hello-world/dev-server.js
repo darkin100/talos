@@ -1,17 +1,14 @@
-// Local dev server — routes requests to the same handlers Vercel uses in
-// production, without requiring the Vercel CLI or a Vercel auth token.
+// Local dev server — routes requests through the same single Vercel
+// function used in production, without requiring the Vercel CLI or auth.
 //
-// Vercel deploys `api/**.js` as individual serverless functions; this file
-// reproduces just enough of that behaviour (req.body parsing, req.query,
+// Vercel deploys `api/[...slug].js` as one serverless function; this file
+// reproduces just enough of that runtime (body parsing, req.query.slug,
 // res.status/res.json) for the local-demo and contributors.
 
 import { createServer } from 'node:http';
 import { URL } from 'node:url';
 
-import healthz from './api/healthz.js';
-import todos from './api/todos.js';
-import todosId from './api/todos/[id].js';
-import search from './api/todos/search.js';
+import handler from './api/[...slug].js';
 import { logEvent } from './lib/logging.js';
 
 const port = Number(process.env.PORT) || 3000;
@@ -63,12 +60,9 @@ const server = createServer(async (req, res) => {
   req.query = Object.fromEntries(url.searchParams);
   const path = url.pathname;
 
-  if (path === '/api/healthz') return healthz(req, res);
-  if (path === '/api/todos') return todos(req, res);
-  if (path === '/api/todos/search') return search(req, res);
-  if (path.startsWith('/api/todos/')) {
-    req.query.id = path.slice('/api/todos/'.length);
-    return todosId(req, res);
+  if (path.startsWith('/api/')) {
+    req.query.slug = path.slice('/api/'.length).split('/').filter(Boolean);
+    return handler(req, res);
   }
   res.status(404).json({ error: 'not found' });
 });
