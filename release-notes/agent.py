@@ -48,14 +48,30 @@ def _setup_arize_tracing(default_project: str) -> None:
     OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 
 
+def _flush_tracing() -> None:
+    """Force-flush queued spans so short-lived runs don't drop traces.
+
+    The BatchSpanProcessor (default in arize.otel) buffers spans; on a one-shot
+    agent run it may not drain before the process exits.
+    """
+    try:
+        from opentelemetry import trace
+
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "force_flush"):
+            provider.force_flush()
+    except Exception:
+        pass
+
+
 _setup_arize_tracing("talos-release-notes")
 
-import json
-import urllib.error
-import urllib.request
-from pathlib import Path
+import json  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from openai import OpenAI
+from openai import OpenAI  # noqa: E402
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -105,15 +121,7 @@ def fetch_pr_commits(token: str, repo: str, pr_number: str) -> list[dict]:
     return json.loads(http_request(f"{GITHUB_API}/repos/{repo}/pulls/{pr_number}/commits", headers=github_headers(token)))
 
 
-def call_llm(api_key: str, model: str, prompt: str) -> str:
-    client = OpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=api_key,
-        default_headers={
-            "HTTP-Referer": "https://github.com/darkin100/talos",
-            "X-Title": "Talos Release Notes Agent",
-        },
-    )
+def call_llm(client: OpenAI, model: str, prompt: str) -> str:
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -149,7 +157,15 @@ def main() -> int:
         f"PR body:\n{pr.get('body') or '(empty)'}\n\n"
         f"Commits:\n{commit_lines}\n"
     )
-    notes = call_llm(openrouter_key, model, prompt)
+    client = OpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=openrouter_key,
+        default_headers={
+            "HTTP-Referer": "https://github.com/darkin100/talos",
+            "X-Title": "Talos Release Notes Agent",
+        },
+    )
+    notes = call_llm(client, model, prompt)
 
     workspace = Path("/workspace")
     if workspace.exists():
@@ -168,4 +184,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        _flush_tracing()
