@@ -125,9 +125,8 @@ def scan_log_file(path: Path) -> list[dict]:
         try:
             entry = json.loads(line)
         except json.JSONDecodeError:
-            # Non-JSON line: heuristic match
-            if "error" in line.lower() or "panic" in line.lower():
-                errors.append({"level": "error", "message": line})
+            # Non-JSON line — comes from the Vercel CLI wrapper (deprecation
+            # warnings, banners, etc.), not the app's structured logger. Skip.
             continue
         level = str(entry.get("level", "")).lower()
         if level in {"error", "critical", "fatal"} or entry.get("status", 0) >= 500:
