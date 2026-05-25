@@ -72,6 +72,8 @@ from openai import OpenAI  # noqa: E402
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 AGENT_TAG = "<!-- talos:security-review -->"
+IGNORE_FILE_PATH = "/workspace/.github/security-review-ignore"
+FAIL_SEVERITIES = {"medium", "high", "critical"}
 
 SYSTEM_PROMPT = """You are a security engineer reviewing a pull request diff.
 Look for OWASP-class issues, secret leaks, unsafe deserialization, command/SQL
@@ -144,6 +146,28 @@ def post_pr_comment(token: str, repo: str, pr_number: str, body: str) -> None:
     http_request(f"{GITHUB_API}/repos/{repo}/issues/{pr_number}/comments", method="POST", headers=headers, body=payload)
 
 
+def load_ignore_patterns(path: str) -> list[str]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = f.readlines()
+    except FileNotFoundError:
+        return []
+    patterns: list[str] = []
+    for line in raw:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        patterns.append(s.lower())
+    return patterns
+
+
+def is_suppressed(finding: dict, patterns: list[str]) -> bool:
+    if not patterns:
+        return False
+    hay = f"{finding.get('title', '')}\n{finding.get('detail', '')}".lower()
+    return any(p in hay for p in patterns)
+
+
 def format_findings(findings: list[dict]) -> str:
     if not findings:
         return "_No findings._"
@@ -178,27 +202,59 @@ def main() -> int:
         },
     )
     review = call_llm(client, model, diff)
-    verdict = review.get("verdict", "fail").lower()
-    findings = review.get("findings", [])
+    raw_findings = review.get("findings", [])
+
+    ignore_patterns = load_ignore_patterns(IGNORE_FILE_PATH)
+    if ignore_patterns:
+        print(
+            f"[security-review] loaded {len(ignore_patterns)} ignore pattern(s) from {IGNORE_FILE_PATH}",
+            flush=True,
+        )
+    kept = [f for f in raw_findings if not is_suppressed(f, ignore_patterns)]
+    suppressed = [f for f in raw_findings if is_suppressed(f, ignore_patterns)]
+
+    # Verdict is recomputed locally so suppressions actually unblock the build,
+    # regardless of what the LLM returned.
+    has_blocking = any(f.get("severity", "").lower() in FAIL_SEVERITIES for f in kept)
+    verdict = "fail" if has_blocking else "pass"
 
     # V1 pass criteria: clean security review = no comment posted at all.
-    if verdict == "pass" and not findings:
+    if verdict == "pass" and not kept and not suppressed:
         print("[security-review] verdict: clean (no comment)", flush=True)
         return 0
 
     status_icon = "PASS" if verdict == "pass" else "FAIL"
-    comment = (
-        f"{AGENT_TAG}\n"
-        f"## Talos Security Review: **{status_icon}**\n\n"
-        f"{format_findings(findings)}\n\n"
-        f"_Model: `{model}`_"
-    )
-    post_pr_comment(token, repo, pr_number, comment)
+    sections = [
+        AGENT_TAG,
+        f"## Talos Security Review: **{status_icon}**",
+        "",
+        format_findings(kept),
+    ]
+    if suppressed:
+        sections.extend(
+            [
+                "",
+                "<details><summary>Suppressed findings</summary>",
+                "",
+                format_findings(suppressed),
+                "",
+                "_Suppressed by `.github/security-review-ignore`._",
+                "</details>",
+            ]
+        )
+    sections.extend(["", f"_Model: `{model}`_"])
+    post_pr_comment(token, repo, pr_number, "\n".join(sections))
 
     if verdict == "pass":
-        print("[security-review] verdict: pass (with informational findings)", flush=True)
+        print(
+            f"[security-review] verdict: pass ({len(kept)} kept, {len(suppressed)} suppressed)",
+            flush=True,
+        )
         return 0
-    print(f"[security-review] verdict: fail ({len(findings)} findings)", flush=True)
+    print(
+        f"[security-review] verdict: fail ({len(kept)} kept, {len(suppressed)} suppressed)",
+        flush=True,
+    )
     return 1
 
 

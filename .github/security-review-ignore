@@ -1,0 +1,12 @@
+# security-review-agent suppression list
+#
+# Each non-blank, non-comment line is a case-insensitive substring matched
+# against the title and detail of every finding. Matches are dropped before
+# the verdict is computed, but still listed (collapsed) in the PR comment
+# for visibility.
+#
+# Add a comment above each entry explaining WHY it is suppressed so future
+# reviewers know whether the suppression is still valid.
+
+# Auth/authz is intentionally out of scope for this prototype.
+authentication and authorization

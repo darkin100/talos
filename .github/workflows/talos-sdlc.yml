@@ -52,6 +52,7 @@ jobs:
           ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
         run: |
           docker run --rm \
+            -v "${{ github.workspace }}:/workspace:ro" \
             -e GITHUB_TOKEN \
             -e GITHUB_REPOSITORY=${{ github.repository }} \
             -e PR_NUMBER=${{ github.event.pull_request.number }} \
