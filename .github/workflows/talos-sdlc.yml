@@ -23,8 +23,8 @@ jobs:
 
       - name: Build agent images
         run: |
-          docker build -t talos/code-review:v1 ./code-review-agent
-          docker build -t talos/security-review:v1 ./security-review-agent
+          docker build -t talos/code-review:v1 ./agents/code-review
+          docker build -t talos/security-review:v1 ./agents/security-review
 
       - name: Run code-review agent
         id: code_review
@@ -95,24 +95,24 @@ jobs:
 
       - name: Build agent images
         run: |
-          docker build -t talos/release-notes:v1 ./release-notes
-          docker build -t talos/rca:v1 ./rca-agent
+          docker build -t talos/release-notes:v1 ./agents/release-notes
+          docker build -t talos/rca:v1 ./agents/rca
 
       - name: Run Todo API tests
-        working-directory: hello-world
+        working-directory: todo-api
         run: npm test
 
       - name: Pull Vercel project config
-        working-directory: hello-world
+        working-directory: todo-api
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build for Vercel
-        working-directory: hello-world
+        working-directory: todo-api
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel
         id: deploy
-        working-directory: hello-world
+        working-directory: todo-api
         run: |
           URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$URL" >> "$GITHUB_OUTPUT"
@@ -177,7 +177,7 @@ jobs:
           ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/hello-world:/workspace:ro" \
+            -v "${{ github.workspace }}/todo-api:/workspace:ro" \
             -v "${{ github.workspace }}/.logs:/logs:ro" \
             -e GITHUB_TOKEN \
             -e GITHUB_REPOSITORY=${{ github.repository }} \

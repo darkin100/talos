@@ -3,10 +3,23 @@
 Whats in a name?  Talos - Hephaestus's bronze automaton, autonomous guardian of Crete.
 
 
-This repo contains the configuration of a full Agentified SDLC. Its an example repo so demonstrated
+This repo contains the configuration of a full Agentified SDLC. It's an example
+repo, intended to demonstrate the pattern end-to-end rather than be production-
+grade.
 
-The exam question
-Is it possible to build a dark factory and how to I measure/validate improvements in the harness?
+The exam question:
+Is it possible to build a dark factory, and how do I measure/validate
+improvements in the harness?
+
+See [PRD.md](PRD.md) for the full design. The repo is laid out as:
+
+```
+talos/
+├── todo-api/      # demo Node Todo API (Vercel)
+├── agents/        # code-review, security-review, release-notes, rca
+├── scripts/       # local-demo.sh
+└── .github/       # workflows
+```
 
 ## Basic Assumptions
 
@@ -27,11 +40,10 @@ Is it possible to build a dark factory and how to I measure/validate improvement
 
 ## Technology Selection
 
-- Used opensource where possible
-    Agents are pi
-- metered on openrouter, no AI subscriptions required
-- runtimes packed into GitHub actions
-- Hosting on Render
+- Open source where possible — agents are Python in slim Docker images.
+- Metered on OpenRouter; no AI subscriptions required.
+- Runtimes packed into GitHub Actions.
+- App hosting on Vercel.
 
 
 

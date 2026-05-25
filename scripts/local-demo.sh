@@ -57,10 +57,10 @@ need() {
 
 build_agents() {
   echo "==> Building agent images"
-  docker build -t talos/code-review:v1     ./code-review-agent
-  docker build -t talos/security-review:v1 ./security-review-agent
-  docker build -t talos/release-notes:v1   ./release-notes
-  docker build -t talos/rca:v1             ./rca-agent
+  docker build -t talos/code-review:v1     ./agents/code-review
+  docker build -t talos/security-review:v1 ./agents/security-review
+  docker build -t talos/release-notes:v1   ./agents/release-notes
+  docker build -t talos/rca:v1             ./agents/rca
 }
 
 review() {
@@ -92,12 +92,12 @@ deploy() {
   fi
 
   echo "==> Running Todo API tests"
-  (cd hello-world && npm test) | sed 's/^/    /'
+  (cd todo-api && npm test) | sed 's/^/    /'
 
   echo "==> Starting Todo API (node dev-server.js on :3000)"
   mkdir -p .logs
   : > .logs/app.log
-  (cd hello-world && PORT=3000 node dev-server.js) > .logs/app.log 2>&1 &
+  (cd todo-api && PORT=3000 node dev-server.js) > .logs/app.log 2>&1 &
   DEV_PID=$!
   trap "kill $DEV_PID 2>/dev/null || true" EXIT
 
@@ -134,7 +134,7 @@ deploy() {
   echo "==> Running RCA agent against .logs/app.log"
   set +e
   docker run --rm \
-    -v "$ROOT_DIR/hello-world:/workspace:ro" \
+    -v "$ROOT_DIR/todo-api:/workspace:ro" \
     -v "$ROOT_DIR/.logs:/logs:ro" \
     -e GITHUB_TOKEN -e OPENROUTER_API_KEY \
     -e ARIZE_SPACE_ID="${ARIZE_SPACE_ID:-}" \

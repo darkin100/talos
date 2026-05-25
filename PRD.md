@@ -105,7 +105,7 @@ All agents run as Docker containers invoked from GitHub Actions.
 ## Success Criteria for V1
 
 ### Must-Have (Conference Demo)
-- [ ] Go todo API deployed and operational locally
+- [ ] Node todo API deployed and operational locally
 - [ ] Code-review agent comments on PR with meaningful feedback
 - [ ] Security-review agent detects and reports security issues
 - [ ] PR auto-merges when both agents pass
@@ -210,13 +210,14 @@ Docker Network (Local Demo)
 talos/
 ├── README.md
 ├── PRD.md (this file)
-├── hello-world/
-│   ├── api/                # Vercel functions (healthz, todos, todos/[id], todos/search)
+├── todo-api/
+│   ├── api/
+│   │   └── handler.js      # single Vercel function (healthz, todos, todos/[id], todos/search)
 │   ├── lib/                # Store + logging helpers
 │   ├── test/               # node:test specs
-│   ├── dev-server.js       # local HTTP shim around the api/ handlers
+│   ├── dev-server.js       # local HTTP shim around handler.js
 │   ├── package.json
-│   └── vercel.json
+│   └── vercel.json         # rewrites /api/:path* -> /api/handler?slug=:path*
 ├── agents/
 │   ├── code-review/
 │   │   ├── Dockerfile
@@ -242,7 +243,7 @@ talos/
 ## Implementation Phases
 
 ### Phase 1: Foundation (Week 1)
-- [ ] Go todo API (hello-world)
+- [ ] Node todo API (todo-api)
 - [ ] GitHub Actions workflow skeleton
 - [ ] Local Docker network setup
 

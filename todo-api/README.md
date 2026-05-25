@@ -1,8 +1,9 @@
-# Hello World: Node Todo API
+# Todo API
 
 A minimal in-memory REST API used as the demonstration application for the
-Talos agentified SDLC. Deployed as vanilla [Vercel Functions](https://vercel.com/docs/functions)
-— each route is its own file under `api/`.
+Talos agentified SDLC. Deployed as a single [Vercel Function](https://vercel.com/docs/functions)
+under `api/handler.js`, with a `vercel.json` rewrite mapping every `/api/*`
+request to it.
 
 The application is intentionally simple so that the focus of the demo
 remains on the agent harness, not the business logic.
@@ -22,9 +23,9 @@ remains on the agent harness, not the business logic.
 ## Layout
 
 ```
-hello-world/
+todo-api/
 ├── api/
-│   └── [...slug].js  # single Vercel function — routes all /api/* internally
+│   └── handler.js    # single Vercel function — internal router by `slug`
 ├── lib/
 │   ├── logging.js
 │   └── store.js
@@ -32,7 +33,7 @@ hello-world/
 │   └── store.test.js
 ├── dev-server.js     # local-only HTTP server, not used by Vercel
 ├── package.json
-└── vercel.json
+└── vercel.json       # rewrites /api/:path* -> /api/handler?slug=:path*
 ```
 
 ### Why one function instead of one per route?
@@ -40,8 +41,8 @@ hello-world/
 Vercel deploys each `api/*.js` file as a separate serverless function with
 its own process. Per-route files therefore can never share in-memory state
 — `POST /api/todos` (in `todos.js`) and `GET /api/todos/:id` (in `[id].js`)
-would each see an empty store. A single catch-all keeps CRUD intact within
-a warm function instance.
+would each see an empty store. A single function plus a rewrite keeps CRUD
+intact within a warm function instance.
 
 ## Run locally
 
@@ -87,9 +88,8 @@ if real persistence is needed.
 
 All logs are emitted as single-line JSON on stdout. Each entry includes
 `timestamp`, `level`, `message`, and `service: todo-api`, plus
-request-scoped fields where applicable. This is the same shape the Go
-implementation emitted, so the RCA agent's heuristics (`scan_log_file`)
-work without modification.
+request-scoped fields where applicable. The RCA agent's `scan_log_file`
+heuristic relies on this shape.
 
 In production the workflow captures these via `vercel logs` and feeds
-them to the RCA agent (see `../rca-agent/`).
+them to the RCA agent (see `../agents/rca/`).
