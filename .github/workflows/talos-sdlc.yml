@@ -72,7 +72,10 @@ jobs:
     steps:
       - name: Auto-merge PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use a PAT (not GITHUB_TOKEN) so the resulting push to main triggers
+          # the deploy-and-verify workflow run. GitHub suppresses workflow runs
+          # for pushes authored by the default GITHUB_TOKEN.
+          GH_TOKEN: ${{ secrets.TALOS_CI_TOKEN }}
         run: gh pr merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --squash --auto
 
   deploy-and-verify:
