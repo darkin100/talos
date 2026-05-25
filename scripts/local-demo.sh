@@ -46,7 +46,6 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-darkin100/talos}"
-COMPOSE_FILE="observ/docker-compose.yml"
 
 need() {
   local var="$1"
@@ -70,11 +69,15 @@ review() {
   echo "==> Running code-review agent"
   docker run --rm \
     -e GITHUB_TOKEN -e OPENROUTER_API_KEY \
+    -e ARIZE_SPACE_ID="${ARIZE_SPACE_ID:-}" \
+    -e ARIZE_API_KEY="${ARIZE_API_KEY:-}" \
     -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" -e PR_NUMBER="$PR_NUMBER" \
     talos/code-review:v1
   echo "==> Running security-review agent"
   docker run --rm \
     -e GITHUB_TOKEN -e OPENROUTER_API_KEY \
+    -e ARIZE_SPACE_ID="${ARIZE_SPACE_ID:-}" \
+    -e ARIZE_API_KEY="${ARIZE_API_KEY:-}" \
     -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" -e PR_NUMBER="$PR_NUMBER" \
     talos/security-review:v1
 }
@@ -82,8 +85,14 @@ review() {
 deploy() {
   need GITHUB_TOKEN; need OPENROUTER_API_KEY
   build_agents
-  echo "==> Bringing up Phoenix + Todo API"
-  docker compose -f "$COMPOSE_FILE" up -d --build
+  echo "==> Building Todo API image"
+  docker build -t talos/todo:v1 ./hello-world
+  echo "==> Starting Todo API"
+  docker rm -f talos-todo >/dev/null 2>&1 || true
+  docker run -d --name talos-todo \
+    -p 8080:8080 \
+    -e PORT=8080 \
+    talos/todo:v1 >/dev/null
 
   echo "==> Waiting for Todo API"
   for i in $(seq 1 30); do
@@ -103,6 +112,8 @@ deploy() {
     docker run --rm \
       -v "$ROOT_DIR:/workspace" \
       -e GITHUB_TOKEN -e OPENROUTER_API_KEY \
+      -e ARIZE_SPACE_ID="${ARIZE_SPACE_ID:-}" \
+      -e ARIZE_API_KEY="${ARIZE_API_KEY:-}" \
       -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" -e PR_NUMBER="$PR_NUMBER" \
       talos/release-notes:v1
   else
@@ -118,10 +129,11 @@ deploy() {
   docker run --rm \
     -v "$ROOT_DIR/hello-world:/workspace:ro" \
     -v "$ROOT_DIR/.logs:/logs:ro" \
-    --network talos_talos-net \
     -e GITHUB_TOKEN -e OPENROUTER_API_KEY \
+    -e ARIZE_SPACE_ID="${ARIZE_SPACE_ID:-}" \
+    -e ARIZE_API_KEY="${ARIZE_API_KEY:-}" \
     -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
-    -e PHOENIX_URL=http://phoenix:6006 \
+    -e PHOENIX_URL="${PHOENIX_URL:-}" \
     -e PR_NUMBER="${PR_NUMBER:-}" \
     talos/rca:v1
   RCA_EXIT=$?
@@ -134,8 +146,8 @@ deploy() {
 }
 
 teardown() {
-  echo "==> Tearing down stack"
-  docker compose -f "$COMPOSE_FILE" down -v || true
+  echo "==> Tearing down Todo API"
+  docker rm -f talos-todo || true
 }
 
 case "${1:-}" in

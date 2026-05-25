@@ -7,6 +7,9 @@ Reads configuration from environment variables (provided by GitHub Actions):
     PR_NUMBER            pull request number to review
     OPENROUTER_API_KEY   OpenRouter API key for LLM access
     MODEL                model id (default: anthropic/claude-sonnet-4-6)
+    ARIZE_SPACE_ID       (optional) Arize AX space id; enables tracing if set
+    ARIZE_API_KEY        (optional) Arize AX API key; required with ARIZE_SPACE_ID
+    ARIZE_PROJECT_NAME   (optional) Arize project name (default: talos-code-review)
 
 Exit codes:
     0 = pass  (no significant feedback posted)
@@ -15,14 +18,42 @@ Exit codes:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
+
+
+def _setup_arize_tracing(default_project: str) -> None:
+    """Initialise Arize AX tracing for the OpenAI/OpenRouter client.
+
+    Must run before `openai` is imported so the instrumentor can patch the SDK.
+    No-ops if ARIZE_SPACE_ID/ARIZE_API_KEY are not set.
+    """
+    space_id = os.environ.get("ARIZE_SPACE_ID")
+    api_key = os.environ.get("ARIZE_API_KEY")
+    if not space_id or not api_key:
+        print("[code-review] ARIZE_SPACE_ID/ARIZE_API_KEY not set; tracing disabled", flush=True)
+        return
+    from arize.otel import register
+    from openinference.instrumentation.openai import OpenAIInstrumentor
+
+    tracer_provider = register(
+        space_id=space_id,
+        api_key=api_key,
+        project_name=os.environ.get("ARIZE_PROJECT_NAME", default_project),
+    )
+    OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
+
+
+_setup_arize_tracing("talos-code-review")
+
+import json
 import urllib.error
 import urllib.request
 
+from openai import OpenAI
+
 GITHUB_API = "https://api.github.com"
-OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 AGENT_TAG = "<!-- talos:code-review -->"
 
 SYSTEM_PROMPT = """You are a senior software engineer performing a code review.
@@ -67,25 +98,23 @@ def fetch_pr_diff(token: str, repo: str, pr_number: str) -> str:
 
 
 def call_llm(api_key: str, model: str, diff: str) -> dict:
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"PR diff:\n\n{diff}"},
-            ],
-            "temperature": 0.2,
-        }
-    ).encode("utf-8")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/darkin100/talos",
-        "X-Title": "Talos Code Review Agent",
-    }
-    raw = http_request(OPENROUTER_API, method="POST", headers=headers, body=body)
-    response = json.loads(raw)
-    content = response["choices"][0]["message"]["content"].strip()
+    client = OpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=api_key,
+        default_headers={
+            "HTTP-Referer": "https://github.com/darkin100/talos",
+            "X-Title": "Talos Code Review Agent",
+        },
+    )
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"PR diff:\n\n{diff}"},
+        ],
+        temperature=0.2,
+    )
+    content = (response.choices[0].message.content or "").strip()
     try:
         return json.loads(content)
     except json.JSONDecodeError:
