@@ -12,12 +12,13 @@
 
 ## V1 Scope
 
-### Application: Hello World (Go Todo API)
-- **Language**: Go
+### Application: Hello World (Node Todo API on Vercel)
+- **Language**: Node.js (ESM)
+- **Runtime**: Vanilla Vercel Functions (one file per route under `api/`)
 - **Purpose**: Simple REST API for todo list management
-- **Storage**: In-memory (no persistent database required)
-- **Endpoints**: Basic CRUD operations (GET, POST, PUT, DELETE todos)
-- **Observability**: Logs to stdout; metrics collected by Arize Phoenix
+- **Storage**: In-memory per function instance (resets on cold start — acceptable for the harness demo)
+- **Endpoints**: Basic CRUD operations (GET, POST, PUT, DELETE todos) under `/api/todos`
+- **Observability**: Logs to stdout as single-line JSON; production logs captured via `vercel logs` for the RCA agent
 
 ### Agents (Dockerized)
 All agents run as Docker containers invoked from GitHub Actions.
@@ -210,22 +211,25 @@ talos/
 ├── README.md
 ├── PRD.md (this file)
 ├── hello-world/
-│   ├── main.go
-│   ├── go.mod
-│   └── Dockerfile
+│   ├── api/                # Vercel functions (healthz, todos, todos/[id], todos/search)
+│   ├── lib/                # Store + logging helpers
+│   ├── test/               # node:test specs
+│   ├── dev-server.js       # local HTTP shim around the api/ handlers
+│   ├── package.json
+│   └── vercel.json
 ├── agents/
 │   ├── code-review/
 │   │   ├── Dockerfile
-│   │   └── main.py (or Go)
+│   │   └── agent.py
 │   ├── security-review/
 │   │   ├── Dockerfile
-│   │   └── main.py (or Go)
+│   │   └── agent.py
 │   ├── release-notes/
 │   │   ├── Dockerfile
-│   │   └── main.py (or Go)
+│   │   └── agent.py
 │   └── rca/
 │       ├── Dockerfile
-│       └── main.py (or Go)
+│       └── agent.py
 ├── .github/
 │   └── workflows/
 │       └── talos-sdlc.yml (main workflow)

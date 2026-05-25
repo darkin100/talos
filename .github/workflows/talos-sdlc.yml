@@ -77,35 +77,64 @@ jobs:
   deploy-and-verify:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
 
       - name: Build agent images
         run: |
           docker build -t talos/release-notes:v1 ./release-notes
           docker build -t talos/rca:v1 ./rca-agent
 
-      - name: Build Todo API image
-        run: docker build -t talos/todo:v1 ./hello-world
+      - name: Run Todo API tests
+        working-directory: hello-world
+        run: npm test
 
-      - name: Start Todo API
+      - name: Pull Vercel project config
+        working-directory: hello-world
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build for Vercel
+        working-directory: hello-world
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel
+        id: deploy
+        working-directory: hello-world
         run: |
-          docker run -d --name talos-todo \
-            -p 8080:8080 \
-            -e PORT=8080 \
-            talos/todo:v1
+          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $URL"
+
+      - name: Smoke deployment
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          healthy=false
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8080/healthz; then
-              echo "todo-api is up"; break
+            if curl -fsS "$URL/api/healthz"; then
+              echo "todo-api is up at $URL"
+              healthy=true
+              break
             fi
             sleep 2
           done
-
-      - name: Smoke traffic
-        run: |
-          curl -fsS -X POST http://localhost:8080/todos -d '{"title":"demo"}' -H 'content-type: application/json'
-          curl -fsS http://localhost:8080/todos
+          if [ "$healthy" != "true" ]; then
+            echo "todo-api never became healthy at $URL after 60s" >&2
+            exit 1
+          fi
+          curl -fsS -X POST "$URL/api/todos" -H 'content-type: application/json' -d '{"title":"demo"}'
+          curl -fsS "$URL/api/todos"
 
       - name: Resolve merged PR number
         id: pr
@@ -133,10 +162,10 @@ jobs:
             -e ARIZE_API_KEY \
             talos/release-notes:v1
 
-      - name: Capture application logs
+      - name: Capture Vercel logs
         run: |
           mkdir -p .logs
-          docker logs talos-todo > .logs/app.log 2>&1 || true
+          vercel logs ${{ steps.deploy.outputs.url }} --token=${{ secrets.VERCEL_TOKEN }} > .logs/app.log 2>&1 || true
 
       - name: Run RCA agent
         env:
@@ -157,8 +186,5 @@ jobs:
             -e ARIZE_API_KEY \
             -e COMMIT_SHA=${{ github.sha }} \
             -e PR_NUMBER=${{ steps.pr.outputs.number }} \
+            -e DEPLOYMENT_URL=${{ steps.deploy.outputs.url }} \
             talos/rca:v1
-
-      - name: Tear down Todo API
-        if: always()
-        run: docker rm -f talos-todo || true

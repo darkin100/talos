@@ -85,27 +85,35 @@ review() {
 deploy() {
   need GITHUB_TOKEN; need OPENROUTER_API_KEY
   build_agents
-  echo "==> Building Todo API image"
-  docker build -t talos/todo:v1 ./hello-world
-  echo "==> Starting Todo API"
-  docker rm -f talos-todo >/dev/null 2>&1 || true
-  docker run -d --name talos-todo \
-    -p 8080:8080 \
-    -e PORT=8080 \
-    talos/todo:v1 >/dev/null
 
-  echo "==> Waiting for Todo API"
+  if ! command -v node >/dev/null 2>&1; then
+    echo "error: node is required (install Node 20+)" >&2
+    exit 1
+  fi
+
+  echo "==> Running Todo API tests"
+  (cd hello-world && npm test) | sed 's/^/    /'
+
+  echo "==> Starting Todo API (node dev-server.js on :3000)"
+  mkdir -p .logs
+  : > .logs/app.log
+  (cd hello-world && PORT=3000 node dev-server.js) > .logs/app.log 2>&1 &
+  DEV_PID=$!
+  trap "kill $DEV_PID 2>/dev/null || true" EXIT
+
   for i in $(seq 1 30); do
-    if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
+    if curl -fsS http://localhost:3000/api/healthz >/dev/null 2>&1; then
       echo "    healthy"; break
     fi
-    sleep 2
+    sleep 1
   done
 
   echo "==> Smoke traffic"
-  curl -fsS -X POST http://localhost:8080/todos \
+  curl -fsS -X POST http://localhost:3000/api/todos \
     -H 'content-type: application/json' -d '{"title":"demo"}' | sed 's/^/    /'
-  curl -fsS http://localhost:8080/todos | sed 's/^/    /'
+  echo
+  curl -fsS http://localhost:3000/api/todos | sed 's/^/    /'
+  echo
 
   if [ -n "${PR_NUMBER:-}" ]; then
     echo "==> Generating release notes for PR #$PR_NUMBER"
@@ -120,11 +128,10 @@ deploy() {
     echo "==> Skipping release notes (set PR_NUMBER to enable)"
   fi
 
-  echo "==> Capturing application logs"
-  mkdir -p .logs
-  docker logs talos-todo > .logs/app.log 2>&1 || true
+  # Give the dev server a moment to flush the smoke-traffic logs.
+  sleep 1
 
-  echo "==> Running RCA agent"
+  echo "==> Running RCA agent against .logs/app.log"
   set +e
   docker run --rm \
     -v "$ROOT_DIR/hello-world:/workspace:ro" \
@@ -146,8 +153,9 @@ deploy() {
 }
 
 teardown() {
-  echo "==> Tearing down Todo API"
-  docker rm -f talos-todo || true
+  echo "==> Tearing down Todo API dev server"
+  # Best-effort: kill any node process still serving dev-server.js.
+  pkill -f "node dev-server.js" 2>/dev/null || true
 }
 
 case "${1:-}" in
