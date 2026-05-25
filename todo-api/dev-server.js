@@ -10,6 +10,7 @@ import { createServer } from 'node:http';
 import { URL } from 'node:url';
 
 import handler from './api/handler.js';
+import rootHandler from './api/index.js';
 import { logEvent } from './lib/logging.js';
 
 const port = Number(process.env.PORT) || 3000;
@@ -61,6 +62,9 @@ const server = createServer(async (req, res) => {
   req.query = Object.fromEntries(url.searchParams);
   const path = url.pathname;
 
+  if (path === '/') {
+    return rootHandler(req, res);
+  }
   if (path.startsWith('/api/')) {
     req.query.slug = path.slice('/api/'.length).split('/').filter(Boolean);
     return handler(req, res);
