@@ -1,14 +1,15 @@
 // Local dev server — routes requests through the same single Vercel
 // function used in production, without requiring the Vercel CLI or auth.
 //
-// Vercel deploys `api/[...slug].js` as one serverless function; this file
-// reproduces just enough of that runtime (body parsing, req.query.slug,
-// res.status/res.json) for the local-demo and contributors.
+// Vercel deploys `api/handler.js` as one serverless function (with a
+// `/api/:path*` rewrite in vercel.json); this file reproduces just
+// enough of that runtime (body parsing, req.query.slug, res.status/
+// res.json) for the local-demo and contributors.
 
 import { createServer } from 'node:http';
 import { URL } from 'node:url';
 
-import handler from './api/[...slug].js';
+import handler from './api/handler.js';
 import { logEvent } from './lib/logging.js';
 
 const port = Number(process.env.PORT) || 3000;

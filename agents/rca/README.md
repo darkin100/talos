@@ -30,7 +30,7 @@ opens a GitHub issue, and exits non-zero to pause the route to live.
 ```bash
 docker build -t talos/rca:v1 .
 docker run --rm \
-  -v "$PWD/hello-world:/workspace:ro" \
+  -v "$PWD/todo-api:/workspace:ro" \
   -v "$PWD/.logs:/logs:ro" \
   -e GITHUB_TOKEN -e GITHUB_REPOSITORY=darkin100/talos \
   -e OPENROUTER_API_KEY \
