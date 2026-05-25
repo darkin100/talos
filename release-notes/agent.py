@@ -7,7 +7,7 @@ run after the PR is merged in the workflow.
     GITHUB_REPOSITORY    owner/repo
     PR_NUMBER            merged pull request number
     OPENROUTER_API_KEY   OpenRouter API key
-    MODEL                model id (default: anthropic/claude-sonnet-4-6)
+    MODEL                model id (default: deepseek/deepseek-v4-flash)
     RELEASE_TAG          optional tag to attach the release to (e.g. v0.1.0)
     ARIZE_SPACE_ID       (optional) Arize AX space id; enables tracing if set
     ARIZE_API_KEY        (optional) Arize AX API key; required with ARIZE_SPACE_ID
@@ -144,7 +144,7 @@ def main() -> int:
     repo = env("GITHUB_REPOSITORY")
     pr_number = env("PR_NUMBER")
     openrouter_key = env("OPENROUTER_API_KEY")
-    model = os.environ.get("MODEL", "anthropic/claude-sonnet-4-6")
+    model = os.environ.get("MODEL", "deepseek/deepseek-v4-flash")
     release_tag = os.environ.get("RELEASE_TAG", "")
 
     print(f"[release-notes] generating for {repo}#{pr_number}", flush=True)

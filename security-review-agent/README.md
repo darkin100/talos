@@ -11,7 +11,7 @@ and comments on the PR only when problems are found.
 | `GITHUB_REPOSITORY`  | yes      | `owner/repo`                               |
 | `PR_NUMBER`          | yes      | Pull request number                        |
 | `OPENROUTER_API_KEY` | yes      | OpenRouter API key                         |
-| `MODEL`              | no       | Model id (default `anthropic/claude-sonnet-4-6`) |
+| `MODEL`              | no       | Model id (default `deepseek/deepseek-v4-flash`) |
 
 ## V1 pass criteria
 

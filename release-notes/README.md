@@ -13,7 +13,7 @@ is provided.
 | `GITHUB_REPOSITORY`  | yes      | `owner/repo`                               |
 | `PR_NUMBER`          | yes      | Merged PR number                            |
 | `OPENROUTER_API_KEY` | yes      | OpenRouter API key                         |
-| `MODEL`              | no       | Model id (default `anthropic/claude-sonnet-4-6`) |
+| `MODEL`              | no       | Model id (default `deepseek/deepseek-v4-flash`) |
 | `RELEASE_TAG`        | no       | Tag to attach the release to                |
 
 ## Run locally

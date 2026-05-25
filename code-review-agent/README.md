@@ -10,7 +10,7 @@ Reviews a pull request diff with an LLM (via OpenRouter) and comments on the PR.
 | `GITHUB_REPOSITORY`  | yes      | `owner/repo`                               |
 | `PR_NUMBER`          | yes      | Pull request number                        |
 | `OPENROUTER_API_KEY` | yes      | OpenRouter API key                         |
-| `MODEL`              | no       | Model id (default `anthropic/claude-sonnet-4-6`) |
+| `MODEL`              | no       | Model id (default `deepseek/deepseek-v4-flash`) |
 
 ## Outputs
 
