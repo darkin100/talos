@@ -6,7 +6,7 @@ Reads configuration from environment variables (provided by GitHub Actions):
     GITHUB_REPOSITORY    owner/repo (e.g. darkin100/talos)
     PR_NUMBER            pull request number to review
     OPENROUTER_API_KEY   OpenRouter API key for LLM access
-    MODEL                model id (default: deepseek/deepseek-v4-flash)
+    MODEL                model id (default: anthropic/claude-haiku-4.5)
     ARIZE_SPACE_ID       (optional) Arize AX space id; enables tracing if set
     ARIZE_API_KEY        (optional) Arize AX API key; required with ARIZE_SPACE_ID
     ARIZE_PROJECT_NAME   (optional) Arize project name (default: talos-code-review)
@@ -154,7 +154,7 @@ def main() -> int:
     repo = env("GITHUB_REPOSITORY")
     pr_number = env("PR_NUMBER")
     openrouter_key = env("OPENROUTER_API_KEY")
-    model = os.environ.get("MODEL", "deepseek/deepseek-v4-flash")
+    model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
 
     print(f"[code-review] reviewing {repo}#{pr_number} with {model}", flush=True)
     diff = fetch_pr_diff(token, repo, pr_number)

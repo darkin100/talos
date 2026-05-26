@@ -8,7 +8,7 @@ Environment:
     GITHUB_TOKEN          token with `issues:write`
     GITHUB_REPOSITORY     owner/repo
     OPENROUTER_API_KEY    OpenRouter API key
-    MODEL                 model id (default: deepseek/deepseek-v4-flash)
+    MODEL                 model id (default: anthropic/claude-haiku-4.5)
     LOG_FILE              path to JSON log file to scan (default: /logs/app.log)
     SOURCE_DIR            source root for code lookup (default: /workspace)
     PHOENIX_URL           optional Phoenix base URL (e.g. http://phoenix:6006)
@@ -208,7 +208,7 @@ def main() -> int:
     token = env("GITHUB_TOKEN")
     repo = env("GITHUB_REPOSITORY")
     openrouter_key = env("OPENROUTER_API_KEY")
-    model = os.environ.get("MODEL", "deepseek/deepseek-v4-flash")
+    model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
     log_file = Path(os.environ.get("LOG_FILE", "/logs/app.log"))
     source_dir = Path(os.environ.get("SOURCE_DIR", "/workspace"))
     phoenix_url = os.environ.get("PHOENIX_URL", "")

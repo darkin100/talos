@@ -18,7 +18,7 @@ Environment:
     GITHUB_REPOSITORY     owner/repo
     OPENROUTER_API_KEY    OpenRouter API key
     DEPLOYMENT_URL        base URL of the deployed API (e.g. https://foo.vercel.app)
-    MODEL                 model id (default: deepseek/deepseek-v4-flash)
+    MODEL                 model id (default: anthropic/claude-haiku-4.5)
     SPEC_FILE             path to OpenAPI YAML (default: /workspace/openapi.yaml)
     COMMIT_SHA            optional sha to include in the issue body
     PR_NUMBER             optional PR number to cross-reference in the issue
@@ -441,7 +441,7 @@ def main() -> int:
     repo = env("GITHUB_REPOSITORY")
     openrouter_key = env("OPENROUTER_API_KEY")
     deployment_url = env("DEPLOYMENT_URL")
-    model = os.environ.get("MODEL", "deepseek/deepseek-v4-flash")
+    model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
     spec_file = Path(os.environ.get("SPEC_FILE", "/workspace/openapi.yaml"))
     commit_sha = os.environ.get("COMMIT_SHA", "")
     pr_number = os.environ.get("PR_NUMBER", "")
