@@ -99,6 +99,7 @@ jobs:
       - name: Build agent images
         run: |
           docker build -t talos/release-notes:v1 ./agents/release-notes
+          docker build -t talos/contract-test:v1 ./agents/contract-test
           docker build -t talos/rca:v1 ./agents/rca
 
       - name: Run Todo API tests
@@ -172,6 +173,25 @@ jobs:
         run: |
           mkdir -p .logs
           vercel logs ${{ steps.deploy.outputs.url }} --token=${{ secrets.VERCEL_TOKEN }} > .logs/app.log 2>&1 || true
+
+      - name: Run contract-test agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ARIZE_SPACE_ID: ${{ secrets.ARIZE_SPACE_ID }}
+          ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/todo-api:/workspace:ro" \
+            -e GITHUB_TOKEN \
+            -e GITHUB_REPOSITORY=${{ github.repository }} \
+            -e OPENROUTER_API_KEY \
+            -e ARIZE_SPACE_ID \
+            -e ARIZE_API_KEY \
+            -e DEPLOYMENT_URL=${{ steps.deploy.outputs.url }} \
+            -e COMMIT_SHA=${{ github.sha }} \
+            -e PR_NUMBER=${{ steps.pr.outputs.number }} \
+            talos/contract-test:v1
 
       - name: Run RCA agent
         env:
