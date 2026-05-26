@@ -16,8 +16,6 @@ jobs:
   pr-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    outputs:
-      verdict: ${{ steps.summary.outputs.verdict }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,13 +60,9 @@ jobs:
             -e ARIZE_API_KEY \
             talos/security-review:v1
 
-      - name: Summarise
-        id: summary
-        run: echo "verdict=pass" >> "$GITHUB_OUTPUT"
-
   auto-merge:
     needs: pr-review
-    if: github.event_name == 'pull_request' && needs.pr-review.outputs.verdict == 'pass'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Auto-merge PR
