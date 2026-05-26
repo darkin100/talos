@@ -191,7 +191,7 @@ jobs:
       - name: Promote to production
         working-directory: todo-api
         run: |
-          vercel promote ${{ steps.deploy.outputs.url }} --yes --token=${{ secrets.VERCEL_TOKEN }}
+          vercel promote ${{ steps.deploy.outputs.url }} --yes --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }}
           echo "Promoted ${{ steps.deploy.outputs.url }} to production"
 
       - name: Run RCA agent
