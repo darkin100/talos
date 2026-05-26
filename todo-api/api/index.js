@@ -7,7 +7,7 @@ import { logEvent } from '../lib/logging.js';
 export default function handler(req, res) {
   const start = Date.now();
   res.setHeader('content-type', 'text/plain');
-  res.status(200).end('hello');
+  res.status(200).end('hello world');
   logEvent('info', 'http_request', {
     method: req.method,
     path: '/',
