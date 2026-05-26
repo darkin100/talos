@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -79,7 +80,7 @@ jobs:
         run: gh pr merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --squash --auto
 
   deploy-and-verify:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
