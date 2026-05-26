@@ -1,0 +1,62 @@
+name: Talos Code
+
+# Trigger: someone with write access posts a comment containing `@talos` on an
+# issue. The agent picks up the issue, implements it via the Pi coding agent,
+# and opens a PR.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  code:
+    # Skip PR comments (issue_comment fires for both); require @talos mention;
+    # require the commenter to have write access (OWNER / MEMBER / COLLABORATOR).
+    if: >-
+      github.event.issue.pull_request == null &&
+      contains(github.event.comment.body, '@talos') &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so the agent can rebase / inspect prior commits.
+          fetch-depth: 0
+          # Use the PAT here too so subsequent `git push` from inside the
+          # container can hit GitHub without re-auth dance.
+          token: ${{ secrets.TALOS_CI_TOKEN }}
+
+      - name: Build agent image
+        run: docker build -t talos/code:v1 ./agents/code
+
+      - name: Run code agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUSH_TOKEN: ${{ secrets.TALOS_CI_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ARIZE_SPACE_ID: ${{ secrets.ARIZE_SPACE_ID }}
+          ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -e GITHUB_TOKEN \
+            -e PUSH_TOKEN \
+            -e GITHUB_REPOSITORY=${{ github.repository }} \
+            -e ISSUE_NUMBER=${{ github.event.issue.number }} \
+            -e COMMENT_ID=${{ github.event.comment.id }} \
+            -e TRIGGERED_BY=${{ github.event.comment.user.login }} \
+            -e OPENROUTER_API_KEY \
+            -e ARIZE_SPACE_ID \
+            -e ARIZE_API_KEY \
+            -e GITHUB_RUN_ID=${{ github.run_id }} \
+            talos/code:v1
