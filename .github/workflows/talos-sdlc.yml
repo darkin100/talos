@@ -114,13 +114,13 @@ jobs:
         working-directory: todo-api
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy to Vercel
+      - name: Deploy to Vercel (preview)
         id: deploy
         working-directory: todo-api
         run: |
-          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Deployed to $URL"
+          echo "Deployed to preview: $URL"
 
       - name: Smoke deployment
         run: |
@@ -192,6 +192,12 @@ jobs:
             -e COMMIT_SHA=${{ github.sha }} \
             -e PR_NUMBER=${{ steps.pr.outputs.number }} \
             talos/contract-test:v1
+
+      - name: Promote to production
+        working-directory: todo-api
+        run: |
+          vercel promote ${{ steps.deploy.outputs.url }} --yes --token=${{ secrets.VERCEL_TOKEN }}
+          echo "Promoted ${{ steps.deploy.outputs.url }} to production"
 
       - name: Run RCA agent
         env:
