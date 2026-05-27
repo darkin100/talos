@@ -175,6 +175,14 @@ def _extract_json_object(content: str) -> dict:
     Models sometimes wrap JSON in ``` fences and/or surround it with prose.
     Find the first '{' and use raw_decode to consume one JSON value, ignoring
     any trailing text. Raises ValueError loud if no object is present.
+
+    Safety note: the stdlib `json` module decodes only JSON primitives,
+    lists, and dicts — it does not deserialize arbitrary Python objects
+    (it is not `pickle`), so `raw_decode` of untrusted LLM output cannot
+    execute code or instantiate classes. Trailing content after the first
+    object is intentionally discarded; the consumer only reads named
+    fields from the returned dict, so a smuggled second object would have
+    no execution path.
     """
     s = content.strip()
     if s.startswith("```"):

@@ -73,6 +73,7 @@ def _flush_tracing() -> None:
 
 _TRACER_PROVIDER = _setup_arize_tracing("talos-code")
 
+import base64  # noqa: E402
 import json  # noqa: E402
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -206,6 +207,16 @@ def configure_git(workspace: str) -> None:
 
 
 def build_prompt(issue: dict, comments: list[dict]) -> str:
+    # Prompt-injection note: issue title, body, and comments are
+    # attacker-influenceable in principle, and we deliberately pass them
+    # through to Pi without sanitisation — sanitising free-form English
+    # would just blind the agent. The primary control is upstream in the
+    # workflow: `if:` gates on `author_association ∈ {OWNER, MEMBER,
+    # COLLABORATOR}`, so an unprivileged user can't trigger a run at all.
+    # Secondary controls: Pi executes inside an ephemeral container, the
+    # env handed to it is scrubbed of push/tracing secrets in `run_pi`,
+    # and `PI_APPEND_SYSTEM_PROMPT` instructs Pi not to touch CI files or
+    # secrets. The harness (not Pi) does the git push and PR open.
     title = issue.get("title") or "(no title)"
     body = issue.get("body") or "(no body)"
     parts = [
@@ -251,7 +262,11 @@ def run_pi(
         "--append-system-prompt", PI_APPEND_SYSTEM_PROMPT,
         prompt,
     ]
-    env_vars = os.environ.copy()
+    # Strip secrets the agent doesn't need before handing the env to Pi: a
+    # prompt-injected issue body could otherwise convince Pi to exfiltrate the
+    # push token or tracing keys.
+    sensitive = {"PUSH_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "ARIZE_API_KEY", "ARIZE_SPACE_ID"}
+    env_vars = {k: v for k, v in os.environ.items() if k not in sensitive}
     env_vars["OPENROUTER_API_KEY"] = openrouter_key
     # Pi reads context files (CLAUDE.md/AGENTS.md) and skills from cwd ancestors.
     print(f"[code] launching pi: {' '.join(cmd[:6])} ... <prompt {len(prompt)} chars>", flush=True)
@@ -334,9 +349,30 @@ def commit_and_push(workspace: str, branch: str, issue_number: str, summary: str
         cwd=workspace,
     )
     # Push using the supplied PAT so downstream workflows (the existing
-    # talos-sdlc.yml on PR open) actually fire.
-    remote = f"https://x-access-token:{push_token}@github.com/{repo}.git"
-    run(["git", "push", remote, f"HEAD:refs/heads/{branch}"], cwd=workspace)
+    # talos-sdlc.yml on PR open) actually fire. Write the credential into
+    # .git/config directly so the token never lands in argv (which `run()`
+    # logs) or in the remote URL.
+    basic = base64.b64encode(f"x-access-token:{push_token}".encode()).decode()
+    config_path = Path(workspace, ".git", "config")
+    with config_path.open("a", encoding="utf-8") as f:
+        f.write(
+            '\n[http "https://github.com/"]\n'
+            f"\textraheader = AUTHORIZATION: basic {basic}\n"
+        )
+    try:
+        run(
+            ["git", "push", f"https://github.com/{repo}.git", f"HEAD:refs/heads/{branch}"],
+            cwd=workspace,
+        )
+    finally:
+        # Strip the credential out of the config so a later step can't read it.
+        text = config_path.read_text(encoding="utf-8")
+        cleaned = text.replace(
+            '\n[http "https://github.com/"]\n'
+            f"\textraheader = AUTHORIZATION: basic {basic}\n",
+            "",
+        )
+        config_path.write_text(cleaned, encoding="utf-8")
 
 
 def open_pr(token: str, repo: str, branch: str, issue_number: str, issue_title: str, summary: str, model: str) -> str:
