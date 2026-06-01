@@ -4,16 +4,30 @@
 // Vercel deploys `api/handler.js` as one serverless function (with a
 // `/api/:path*` rewrite in vercel.json); this file reproduces just
 // enough of that runtime (body parsing, req.query.slug, res.status/
-// res.json) for the local-demo and contributors.
+// res.json) for the local-demo and contributors. It also serves the
+// static files under `public/` the same way Vercel does in production.
 
 import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { URL } from 'node:url';
+import { dirname, join, normalize, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import handler from './api/handler.js';
-import rootHandler from './api/index.js';
 import { logEvent } from './lib/logging.js';
 
 const port = Number(process.env.PORT) || 3000;
+const publicDir = resolve(dirname(fileURLToPath(import.meta.url)), 'public');
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+};
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -50,6 +64,28 @@ function patchResponse(res) {
   return res;
 }
 
+async function serveStatic(req, res, urlPath) {
+  const relative = urlPath === '/' ? '/index.html' : urlPath;
+  // Resolve under publicDir and reject any path that escapes it.
+  const candidate = normalize(join(publicDir, relative));
+  if (!candidate.startsWith(publicDir)) {
+    res.status(403).json({ error: 'forbidden' });
+    return;
+  }
+  try {
+    const body = await readFile(candidate);
+    const ext = candidate.slice(candidate.lastIndexOf('.'));
+    res.setHeader('content-type', MIME[ext] || 'application/octet-stream');
+    res.status(200).end(body);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    throw err;
+  }
+}
+
 const server = createServer(async (req, res) => {
   patchResponse(res);
   try {
@@ -62,14 +98,11 @@ const server = createServer(async (req, res) => {
   req.query = Object.fromEntries(url.searchParams);
   const path = url.pathname;
 
-  if (path === '/') {
-    return rootHandler(req, res);
-  }
   if (path.startsWith('/api/')) {
     req.query.slug = path.slice('/api/'.length).split('/').filter(Boolean);
     return handler(req, res);
   }
-  res.status(404).json({ error: 'not found' });
+  return serveStatic(req, res, path);
 });
 
 server.listen(port, () => {

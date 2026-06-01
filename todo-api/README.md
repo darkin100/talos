@@ -1,12 +1,18 @@
-# Todo API
+# Todo Webapp
 
-A minimal in-memory REST API used as the demonstration application for the
-Talos agentified SDLC. Deployed as a single [Vercel Function](https://vercel.com/docs/functions)
-under `api/handler.js`, with a `vercel.json` rewrite mapping every `/api/*`
-request to it.
+A minimal in-memory Todo webapp used as the demonstration application for
+the Talos agentified SDLC. The static UI under `public/` calls a single
+[Vercel Function](https://vercel.com/docs/functions) at `api/handler.js`;
+`vercel.json` rewrites every `/api/*` request to that handler.
 
 The application is intentionally simple so that the focus of the demo
 remains on the agent harness, not the business logic.
+
+## UI
+
+A vanilla HTML/CSS/JS frontend is served at `/` from `public/index.html`.
+It lists, creates, toggles, deletes, and filters todos by calling the
+endpoints below — no framework, no build step.
 
 ## Endpoints
 
@@ -29,6 +35,8 @@ todo-api/
 ├── lib/
 │   ├── logging.js
 │   └── store.js
+├── public/
+│   └── index.html    # static UI served at / (Vercel auto-serves public/)
 ├── test/
 │   └── store.test.js
 ├── dev-server.js     # local-only HTTP server, not used by Vercel
@@ -47,13 +55,14 @@ intact within a warm function instance.
 ## Run locally
 
 ```bash
-node dev-server.js          # serves on http://localhost:3000
+node dev-server.js          # UI at http://localhost:3000, API under /api/*
 npm test                    # runs node:test against the store
 ```
 
 `dev-server.js` exists so contributors do not need the Vercel CLI or a
-Vercel auth token. It mounts the same handlers Vercel uses in production
-but reuses the host's `http` module instead.
+Vercel auth token. It mounts the same handler Vercel uses in production
+and serves files from `public/` the same way Vercel does, using the
+host's `http` module.
 
 ## Deploy to Vercel
 
