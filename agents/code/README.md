@@ -8,8 +8,7 @@ pull request. Triggered by an `@talos` mention in a comment on an issue.
 
 | Variable             | Required | Description                                                |
 |----------------------|----------|------------------------------------------------------------|
-| `GITHUB_TOKEN`       | yes      | Token with `issues:write` (used for reactions/comments)    |
-| `PUSH_TOKEN`         | yes      | PAT with `contents:write` + `pull-requests:write`. A separate token is needed so the resulting PR triggers downstream workflows (the default `GITHUB_TOKEN` suppresses `workflow_run` events). |
+| `GITHUB_TOKEN`       | yes      | Default Actions token with `contents:write`, `issues:write`, `pull-requests:write`. Used for push, PR creation, comments/reactions, and firing the `repository_dispatch` that wakes up the SDLC workflow. |
 | `GITHUB_REPOSITORY`  | yes      | `owner/repo`                                                |
 | `ISSUE_NUMBER`       | yes      | Issue number to resolve                                     |
 | `COMMENT_ID`         | no       | Id of the triggering `@talos` comment (for the eyes/rocket reactions) |
@@ -41,12 +40,26 @@ docker build -t talos/code:v1 .
 docker run --rm \
   -v "$PWD/..:/workspace" \
   -e GITHUB_TOKEN \
-  -e PUSH_TOKEN \
   -e GITHUB_REPOSITORY=darkin100/talos \
   -e ISSUE_NUMBER=42 \
   -e OPENROUTER_API_KEY \
   talos/code:v1
 ```
+
+## How the SDLC handoff works
+
+GitHub deliberately suppresses downstream `pull_request` workflow runs for
+PRs created by the default `GITHUB_TOKEN` (loop-prevention). Rather than
+pay for that with a long-lived push PAT, the agent:
+
+1. Pushes the branch and opens the PR with `GITHUB_TOKEN`.
+2. Calls `POST /repos/{owner}/{repo}/dispatches` with
+   `event_type=talos-pr-ready` and `client_payload.pr_number=<N>`.
+3. `talos-sdlc.yml` listens on `repository_dispatch: [talos-pr-ready]`
+   and runs code-review / security-review / auto-merge against that PR.
+
+`contents: write` on the workflow's `GITHUB_TOKEN` is enough to fire the
+dispatch — no PAT required.
 
 ## How Pi is wired up
 
