@@ -5,12 +5,17 @@ branch, and opens a pull request.
 Triggered from `.github/workflows/talos-code.yml` when someone with write
 access posts a comment containing `@talos` on an issue.
 
+Auth model: the agent runs with the default workflow `GITHUB_TOKEN` only —
+there is no long-lived push PAT. `actions/checkout` writes its credential
+into `.git/config` so `git push` works through the bind mount. A PR opened
+by GITHUB_TOKEN doesn't fire downstream `pull_request` workflows (GitHub's
+loop-prevention), so after opening the PR we emit a `repository_dispatch`
+event of type `talos-pr-ready` to wake up `talos-sdlc.yml`.
+
 Environment:
-    GITHUB_TOKEN          token with `issues:write` (used for reactions/comments)
-    PUSH_TOKEN            PAT with `contents:write` + `pull-requests:write`
-                          (a separate token is used for push so the resulting
-                          PR triggers downstream workflows; the default
-                          GITHUB_TOKEN suppresses workflow_run events)
+    GITHUB_TOKEN          default Actions token (contents:write, issues:write,
+                          pull-requests:write). Used for push, PR creation,
+                          comments/reactions, and the dispatch fire.
     GITHUB_REPOSITORY     owner/repo
     ISSUE_NUMBER          issue number that the agent should resolve
     COMMENT_ID            id of the @talos comment that triggered the run
@@ -73,7 +78,6 @@ def _flush_tracing() -> None:
 
 _TRACER_PROVIDER = _setup_arize_tracing("talos-code")
 
-import base64  # noqa: E402
 import json  # noqa: E402
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -213,10 +217,12 @@ def build_prompt(issue: dict, comments: list[dict]) -> str:
     # would just blind the agent. The primary control is upstream in the
     # workflow: `if:` gates on `author_association ∈ {OWNER, MEMBER,
     # COLLABORATOR}`, so an unprivileged user can't trigger a run at all.
-    # Secondary controls: Pi executes inside an ephemeral container, the
-    # env handed to it is scrubbed of push/tracing secrets in `run_pi`,
-    # and `PI_APPEND_SYSTEM_PROMPT` instructs Pi not to touch CI files or
-    # secrets. The harness (not Pi) does the git push and PR open.
+    # Secondary controls: Pi executes inside an ephemeral container with
+    # only the job-lifetime GITHUB_TOKEN available (no long-lived PAT),
+    # the env handed to it is scrubbed of the workflow token and tracing
+    # keys in `run_pi`, and `PI_APPEND_SYSTEM_PROMPT` instructs Pi not to
+    # touch CI files or secrets. The harness (not Pi) does the git push
+    # and PR open.
     title = issue.get("title") or "(no title)"
     body = issue.get("body") or "(no body)"
     parts = [
@@ -262,10 +268,9 @@ def run_pi(
         "--append-system-prompt", PI_APPEND_SYSTEM_PROMPT,
         prompt,
     ]
-    # Strip secrets the agent doesn't need before handing the env to Pi: a
-    # prompt-injected issue body could otherwise convince Pi to exfiltrate the
-    # push token or tracing keys.
-    sensitive = {"PUSH_TOKEN", "GITHUB_TOKEN", "GH_TOKEN", "ARIZE_API_KEY", "ARIZE_SPACE_ID"}
+    # Strip secrets Pi doesn't need: a prompt-injected issue body could
+    # otherwise convince Pi to exfiltrate the workflow token or tracing keys.
+    sensitive = {"GITHUB_TOKEN", "GH_TOKEN", "ARIZE_API_KEY", "ARIZE_SPACE_ID"}
     env_vars = {k: v for k, v in os.environ.items() if k not in sensitive}
     env_vars["OPENROUTER_API_KEY"] = openrouter_key
     # Pi reads context files (CLAUDE.md/AGENTS.md) and skills from cwd ancestors.
@@ -339,7 +344,7 @@ def has_changes(workspace: str) -> bool:
     return bool(result.stdout.strip())
 
 
-def commit_and_push(workspace: str, branch: str, issue_number: str, summary: str, push_token: str, repo: str) -> None:
+def commit_and_push(workspace: str, branch: str, issue_number: str, summary: str) -> None:
     run(["git", "checkout", "-b", branch], cwd=workspace)
     run(["git", "add", "-A"], cwd=workspace)
     title_line = f"talos: address issue #{issue_number}"
@@ -348,38 +353,18 @@ def commit_and_push(workspace: str, branch: str, issue_number: str, summary: str
         ["git", "commit", "-m", title_line, "-m", body_line],
         cwd=workspace,
     )
-    # Push using the supplied PAT so downstream workflows (the existing
-    # talos-sdlc.yml on PR open) actually fire. Write the credential into
-    # .git/config directly so the token never lands in argv (which `run()`
-    # logs) or in the remote URL.
-    basic = base64.b64encode(f"x-access-token:{push_token}".encode()).decode()
-    config_path = Path(workspace, ".git", "config")
-    with config_path.open("a", encoding="utf-8") as f:
-        f.write(
-            '\n[http "https://github.com/"]\n'
-            f"\textraheader = AUTHORIZATION: basic {basic}\n"
-        )
-    try:
-        run(
-            ["git", "push", f"https://github.com/{repo}.git", f"HEAD:refs/heads/{branch}"],
-            cwd=workspace,
-        )
-    finally:
-        # Strip the credential out of the config so a later step can't read it.
-        text = config_path.read_text(encoding="utf-8")
-        cleaned = text.replace(
-            '\n[http "https://github.com/"]\n'
-            f"\textraheader = AUTHORIZATION: basic {basic}\n",
-            "",
-        )
-        config_path.write_text(cleaned, encoding="utf-8")
+    # `actions/checkout` already configured the GITHUB_TOKEN credential in
+    # the bind-mounted .git/config (as http.extraheader), so this push
+    # works with no extra auth plumbing and no token in argv.
+    run(["git", "push", "origin", f"HEAD:refs/heads/{branch}"], cwd=workspace)
 
 
 def open_pr(token: str, repo: str, branch: str, issue_number: str, issue_title: str, summary: str, model: str) -> str:
     """Open a PR via `gh pr create`.
 
-    The caller must pass the PAT (not GITHUB_TOKEN): PRs opened with the
-    default Actions token do not trigger downstream workflows.
+    Uses GITHUB_TOKEN. The PR's `pull_request` event is suppressed by GitHub's
+    loop-prevention, so the caller follows up with `dispatch_pr_ready()` to
+    wake up the downstream SDLC workflow.
     """
     title = (f"talos: {issue_title}".strip())[:120]
     body = (
@@ -408,9 +393,26 @@ def open_pr(token: str, repo: str, branch: str, issue_number: str, issue_title: 
     return ""
 
 
+def dispatch_pr_ready(token: str, repo: str, pr_number: str | int) -> None:
+    """Fire `repository_dispatch: talos-pr-ready` so the SDLC workflow runs.
+
+    A PR opened by GITHUB_TOKEN does not trigger `pull_request` events, so the
+    code-review / security-review / auto-merge pipeline would otherwise sit
+    idle. This dispatch wakes it up, with the PR number in the payload.
+    """
+    gh(
+        [
+            "api", f"repos/{repo}/dispatches",
+            "-X", "POST",
+            "-f", "event_type=talos-pr-ready",
+            "-F", f"client_payload[pr_number]={int(pr_number)}",
+        ],
+        token=token,
+    )
+
+
 def main() -> int:
     token = env("GITHUB_TOKEN")
-    push_token = os.environ.get("PUSH_TOKEN") or token
     repo = env("GITHUB_REPOSITORY")
     issue_number = env("ISSUE_NUMBER")
     comment_id = os.environ.get("COMMENT_ID") or None
@@ -482,9 +484,16 @@ def main() -> int:
             return 0
 
         branch = f"talos/issue-{issue_number}-{run_id}"
-        commit_and_push(workspace, branch, issue_number, summary, push_token, repo)
-        # Use the PAT to create the PR so downstream pr-review fires.
-        pr_url = open_pr(push_token, repo, branch, issue_number, issue.get("title") or "", summary, model)
+        commit_and_push(workspace, branch, issue_number, summary)
+        pr_url = open_pr(token, repo, branch, issue_number, issue.get("title") or "", summary, model)
+
+        # GITHUB_TOKEN-opened PRs don't fire `pull_request` events; this
+        # dispatch is what actually triggers the SDLC workflow.
+        pr_number = pr_url.rstrip("/").rsplit("/", 1)[-1]
+        if pr_number.isdigit():
+            dispatch_pr_ready(token, repo, pr_number)
+        else:
+            print(f"[code] could not parse PR number from {pr_url!r}; SDLC dispatch skipped", flush=True)
 
         post_issue_comment(
             token, repo, issue_number,

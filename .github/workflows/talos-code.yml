@@ -9,7 +9,11 @@ on:
     types: [created]
 
 permissions:
-  contents: read
+  # `contents: write` is needed for two things on the default GITHUB_TOKEN:
+  # pushing the generated branch, and firing the `repository_dispatch` that
+  # wakes up the SDLC workflow (downstream `pull_request` events from a
+  # GITHUB_TOKEN-opened PR are deliberately suppressed by GitHub).
+  contents: write
   issues: write
   pull-requests: write
 
@@ -32,9 +36,10 @@ jobs:
         with:
           # Full history so the agent can rebase / inspect prior commits.
           fetch-depth: 0
-          # Use the PAT here too so subsequent `git push` from inside the
-          # container can hit GitHub without re-auth dance.
-          token: ${{ secrets.TALOS_CI_TOKEN }}
+          # Default GITHUB_TOKEN is fine — actions/checkout writes the
+          # credential into .git/config (via http.extraheader), which the
+          # container inherits through the bind mount, so push works without
+          # any extra plumbing.
 
       - name: Build agent image
         run: docker build -t talos/code:v1 ./agents/code
@@ -42,7 +47,6 @@ jobs:
       - name: Run code agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PUSH_TOKEN: ${{ secrets.TALOS_CI_TOKEN }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ARIZE_SPACE_ID: ${{ secrets.ARIZE_SPACE_ID }}
           ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
@@ -50,7 +54,6 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -e GITHUB_TOKEN \
-            -e PUSH_TOKEN \
             -e GITHUB_REPOSITORY=${{ github.repository }} \
             -e ISSUE_NUMBER=${{ github.event.issue.number }} \
             -e COMMENT_ID=${{ github.event.comment.id }} \
