@@ -169,6 +169,35 @@ def gather_source_context(source_dir: Path, max_chars: int = 8000) -> str:
     return "".join(chunks)
 
 
+def _extract_json_object(content: str) -> dict:
+    """Extract the first JSON object from a model response.
+
+    Models sometimes wrap JSON in ``` fences and/or surround it with prose.
+    Find the first '{' and use raw_decode to consume one JSON value, ignoring
+    any trailing text. Raises ValueError loud if no object is present.
+
+    Safety note: the stdlib `json` module decodes only JSON primitives,
+    lists, and dicts — it does not deserialize arbitrary Python objects
+    (it is not `pickle`), so `raw_decode` of untrusted LLM output cannot
+    execute code or instantiate classes. Trailing content after the first
+    object is intentionally discarded; the consumer only reads named
+    fields from the returned dict, so a smuggled second object would have
+    no execution path.
+    """
+    s = content.strip()
+    if s.startswith("```"):
+        nl = s.find("\n")
+        if nl >= 0:
+            s = s[nl + 1 :]
+    start = s.find("{")
+    if start < 0:
+        raise ValueError(f"no JSON object in model response: {content!r}")
+    obj, _ = json.JSONDecoder().raw_decode(s[start:])
+    if not isinstance(obj, dict):
+        raise ValueError(f"expected JSON object, got {type(obj).__name__}: {content!r}")
+    return obj
+
+
 def call_llm(client: OpenAI, model: str, errors: list[dict], source: str) -> dict:
     error_text = "\n".join(json.dumps(e) for e in errors[:20])
     user_prompt = (
@@ -183,14 +212,7 @@ def call_llm(client: OpenAI, model: str, errors: list[dict], source: str) -> dic
         ],
         temperature=0.2,
     )
-    content = (response.choices[0].message.content or "").strip()
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        stripped = content.strip("`")
-        if stripped.startswith("json"):
-            stripped = stripped[4:].strip()
-        return json.loads(stripped)
+    return _extract_json_object((response.choices[0].message.content or "").strip())
 
 
 def create_issue(token: str, repo: str, title: str, body: str) -> dict:

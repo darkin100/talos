@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # PRs opened by the code agent's GITHUB_TOKEN don't fire `pull_request`
+  # (GitHub's loop-prevention). The agent emits this dispatch instead, with
+  # `client_payload.pr_number` carrying the PR to review.
+  repository_dispatch:
+    types: [talos-pr-ready]
 
 permissions:
   contents: write
@@ -14,11 +19,20 @@ permissions:
 
 jobs:
   pr-review:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
+    env:
+      # Single source of truth for the PR number across both trigger types.
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.client_payload.pr_number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # When the SDLC is woken via repository_dispatch, the default
+          # checkout lands on the dispatch ref (main). Pull the PR head so
+          # security-review (which bind-mounts the workspace) sees the
+          # actual changes under review.
+          ref: ${{ github.event_name == 'repository_dispatch' && format('refs/pull/{0}/head', env.PR_NUMBER) || '' }}
 
       - name: Build agent images
         run: |
@@ -36,7 +50,7 @@ jobs:
           docker run --rm \
             -e GITHUB_TOKEN \
             -e GITHUB_REPOSITORY=${{ github.repository }} \
-            -e PR_NUMBER=${{ github.event.pull_request.number }} \
+            -e PR_NUMBER=${{ env.PR_NUMBER }} \
             -e OPENROUTER_API_KEY \
             -e ARIZE_SPACE_ID \
             -e ARIZE_API_KEY \
@@ -54,7 +68,7 @@ jobs:
             -v "${{ github.workspace }}:/workspace:ro" \
             -e GITHUB_TOKEN \
             -e GITHUB_REPOSITORY=${{ github.repository }} \
-            -e PR_NUMBER=${{ github.event.pull_request.number }} \
+            -e PR_NUMBER=${{ env.PR_NUMBER }} \
             -e OPENROUTER_API_KEY \
             -e ARIZE_SPACE_ID \
             -e ARIZE_API_KEY \
@@ -62,7 +76,7 @@ jobs:
 
   auto-merge:
     needs: pr-review
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Auto-merge PR
@@ -71,7 +85,8 @@ jobs:
           # the deploy-and-verify workflow run. GitHub suppresses workflow runs
           # for pushes authored by the default GITHUB_TOKEN.
           GH_TOKEN: ${{ secrets.TALOS_CI_TOKEN }}
-        run: gh pr merge ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --squash --auto
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.client_payload.pr_number }}
+        run: gh pr merge ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --squash --auto
 
   deploy-and-verify:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
