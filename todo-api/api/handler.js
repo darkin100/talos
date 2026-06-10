@@ -14,6 +14,10 @@ import { store } from '../lib/store.js';
 import { logEvent } from '../lib/logging.js';
 
 function handleHealthz(req, res) {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method not allowed' });
+    return 405;
+  }
   res.status(200).json({ status: 'ok' });
   return 200;
 }
