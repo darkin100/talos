@@ -132,6 +132,17 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "Deployed to preview: $URL"
 
+      # Publish the preview URL as a commit comment immediately so external
+      # tooling (eval harness, incident seeding) can find the live deployment
+      # while this run is still in progress — the CLI deployment does not
+      # register in the GitHub Deployments API.
+      - name: Publish preview URL
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
+            -f body="talos-preview: ${{ steps.deploy.outputs.url }}" || true
+
       - name: Smoke deployment
         run: |
           URL="${{ steps.deploy.outputs.url }}"
