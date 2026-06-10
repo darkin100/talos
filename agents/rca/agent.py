@@ -70,6 +70,7 @@ def _flush_tracing() -> None:
 _setup_arize_tracing("talos-rca")
 
 import json  # noqa: E402
+import re  # noqa: E402
 import urllib.error  # noqa: E402
 import urllib.request  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -112,12 +113,56 @@ def http_request(url: str, method: str = "GET", headers: dict | None = None, bod
         raise
 
 
-def scan_log_file(path: Path) -> list[dict]:
-    """Return all log entries with level error/critical/fatal."""
+def load_suppressions(path: Path) -> list[dict]:
+    """Load and validate suppression rules; invalid entries are skipped with a warning.
+
+    Each rule is {"id", "pattern", "reason", "ref"}. Patterns are compiled
+    regexes; anchoring lives in the pattern itself (the seed rule uses ^) so
+    a rule cannot match user-controlled substrings mid-message unless it
+    explicitly opts to.
+    """
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        print(f"[rca] warning: unreadable suppressions file {path}", flush=True)
+        return []
+    if not isinstance(raw, list):
+        print("[rca] warning: suppressions.json must be a list", flush=True)
+        return []
+    rules = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        rid, pattern = entry.get("id"), entry.get("pattern")
+        if not (isinstance(rid, str) and rid and isinstance(pattern, str) and 0 < len(pattern) <= 200):
+            print(f"[rca] warning: skipping invalid suppression entry {entry!r}", flush=True)
+            continue
+        try:
+            entry["regex"] = re.compile(pattern)
+        except re.error:
+            print(f"[rca] warning: invalid regex in suppression {rid}", flush=True)
+            continue
+        rules.append(entry)
+    return rules
+
+
+def match_suppression(message: str, rules: list[dict]) -> str | None:
+    """Return the id of the first matching rule, else None. Matches ONLY the message string."""
+    for rule in rules:
+        if rule["regex"].search(message):
+            return rule["id"]
+    return None
+
+
+def scan_log_file(path: Path, rules: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    """Return (error entries, suppression hit counts by rule id)."""
     if not path.exists():
         print(f"[rca] log file {path} does not exist; treating as no-errors", flush=True)
-        return []
+        return [], {}
     errors: list[dict] = []
+    counts: dict[str, int] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
         if not line:
@@ -130,8 +175,12 @@ def scan_log_file(path: Path) -> list[dict]:
             continue
         level = str(entry.get("level", "")).lower()
         if level in {"error", "critical", "fatal"} or entry.get("status", 0) >= 500:
-            errors.append(entry)
-    return errors
+            rid = match_suppression(str(entry.get("message", "")), rules)
+            if rid is not None:
+                counts[rid] = counts.get(rid, 0) + 1
+            else:
+                errors.append(entry)
+    return errors, counts
 
 
 def query_phoenix_errors(base_url: str) -> list[dict]:
@@ -237,8 +286,12 @@ def main() -> int:
     commit_sha = os.environ.get("COMMIT_SHA", "")
     pr_number = os.environ.get("PR_NUMBER", "")
 
-    print(f"[rca] scanning {log_file}", flush=True)
-    errors = scan_log_file(log_file)
+    rules = load_suppressions(Path(__file__).parent / "suppressions.json")
+    print(f"[rca] scanning {log_file} ({len(rules)} suppression rules)", flush=True)
+    errors, suppressed = scan_log_file(log_file, rules)
+    for rid, n in suppressed.items():
+        ref = next((r.get("ref", "") for r in rules if r["id"] == rid), "")
+        print(f"[rca] suppressed {n} events ({rid}, see {ref})", flush=True)
     if phoenix_url:
         errors.extend(query_phoenix_errors(phoenix_url))
 
