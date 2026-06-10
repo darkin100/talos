@@ -1,0 +1,16 @@
+{
+  "id": "rn-001",
+  "suite": "regression",
+  "agent": "release-notes",
+  "track": "wave1/B1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/releases/tag/v48",
+  "pr_number": 26,
+  "pr_title": "talos: PUT /api/todos/:id silently resets completed to false when body omits it",
+  "merge_sha": "b13c0b589733e96c5fd4f337ecf832d85cad4219",
+  "commit_shas": ["cc2f4f32cc9abfc9de2cc20a64517a43ee86b51e"],
+  "files_changed": ["todo-api/lib/store.js", "todo-api/test/store.test.js"],
+  "grader_notes": "Every claim in the reference must be entailed by the diff/commits. The generated v48 note had zero ungrounded claims (verified by hand 2026-06-10), including the operator note about openapi.yaml already marking completed optional — true at the merge SHA.",
+  "reference": "reference.md",
+  "generated": "generated-v48.md"
+}

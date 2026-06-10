@@ -184,6 +184,16 @@ jobs:
           mkdir -p .logs
           vercel logs ${{ steps.deploy.outputs.url }} --token=${{ secrets.VERCEL_TOKEN }} > .logs/app.log 2>&1 || true
 
+      # Persist the log bundle so eval datasets (RCA replay tasks in
+      # evals/datasets/rca/) can be harvested from any run after the fact.
+      - name: Upload log bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-logs-${{ github.run_id }}
+          path: .logs/app.log
+          retention-days: 30
+          if-no-files-found: warn
+
       - name: Run contract-test agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
