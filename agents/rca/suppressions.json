@@ -1,0 +1,8 @@
+[
+  {
+    "id": "dep0169",
+    "pattern": "^\\(node:\\d+\\) \\[DEP0169\\]",
+    "reason": "Vercel runtime bridge deprecation noise on /api/healthz — not app-fixable",
+    "ref": "https://github.com/darkin100/talos/issues/15"
+  }
+]

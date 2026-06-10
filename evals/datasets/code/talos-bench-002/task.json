@@ -1,0 +1,24 @@
+{
+  "id": "talos-bench-002",
+  "suite": "capability",
+  "agent": "code",
+  "track": "wave1/B2+I1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/issues/30",
+  "pr": "https://github.com/darkin100/talos/pull/31",
+  "base_sha": "8bb498482bec189ce762bf5a68d7e09d0e9f8e6e",
+  "solution_sha": "329a65bb9c291af14325d294eed36b3f2d1a093f",
+  "task": "RCA-filed incident: GET /api/todos/search 500s with TypeError q.toLowerCase is not a function when the q query parameter is repeated (arrives as an array). Fix handleSearch to coerce/validate q.",
+  "label": {
+    "type": "fix-a-bug",
+    "defect_file": "todo-api/api/handler.js",
+    "defect_line_at_base": "const q = (req.query && req.query.q) || '';",
+    "hidden_test": "NOT in solution diff — agent omitted the requested regression test (see cr-002). Grader test (SWE-bench style, held out): handler responds non-500 to /api/todos/search?q=a&q=b; store.search receives a string.",
+    "acceptable_solutions": "coerce to string (merged approach: String(rawQ).trim()), take first array element, or reject arrays with 400"
+  },
+  "grader": {
+    "primary": "hidden test above at solution SHA (write into eval harness, not the repo's suite)",
+    "sanity": "file-overlap vs merged diff (handler.js expected)"
+  },
+  "provenance": "Origin chain: seeded incident traffic (I1) -> RCA issue #30 (incident-001 reference trial) -> @talos fix -> PR #31 merged first attempt. Demonstrates the detect-diagnose-fix loop end to end."
+}

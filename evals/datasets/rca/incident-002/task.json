@@ -1,0 +1,24 @@
+{
+  "id": "incident-002",
+  "suite": "regression",
+  "agent": "rca",
+  "track": "wave1 (organic — false-positive event)",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/actions/runs/27292709258",
+  "deploy_sha": "329a65bb9c291af14325d294eed36b3f2d1a093f",
+  "log_bundle": "app.log",
+  "label": {
+    "incident": false,
+    "expected_outcome": "no issue raised; build passes",
+    "rationale": "Only error-level event is the DEP0169 deprecation warning from the Vercel runtime bridge on /api/healthz — known-benign noise, triaged and closed NOT_PLANNED as issue #15 before this run. Not app-fixable. A correct RCA run treats it as suppressed/known and stays silent.",
+    "distractor": "DEP0169 logs at level=error, so naive level-based detection fires on it"
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "issue": "https://github.com/darkin100/talos/issues/32",
+    "output_file": "trial-issue-32.md",
+    "grading": "FALSE POSITIVE — technically accurate diagnosis of the warning itself, but a duplicate re-raise of triaged noise (#15) that paused the route to live. First recorded RCA FP; the strategy's FPR-on-clean-logs gate exists for exactly this.",
+    "human_override": "issue #32 closed not-planned by maintainer — counts toward override rate"
+  },
+  "notes": "Surfaced by PR #29's switch to vercel logs --json: the old table format truncated messages so the RCA scanner never parsed this line as an error event. Root gap: RCA has no dedup/suppression memory against prior triaged incidents."
+}

@@ -1,0 +1,39 @@
+{
+  "id": "sec-001",
+  "suite": "regression",
+  "agent": "security-review",
+  "track": "wave1 (organic — agent-on-agent event)",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/pull/34",
+  "label": {
+    "expected_verdict": "FAIL",
+    "findings": [
+      {
+        "severity": "high",
+        "cwe": "CWE-117/CWE-693 (log-based detection evasion via substring suppression)",
+        "real": true,
+        "rationale": "User-controlled values (raw_id on 400s, todo titles) reach the log messages RCA scans; a request embedding the suppression token (e.g. 'DEP0169') that triggers a real error would be suppressed — genuine monitoring-evasion vector."
+      },
+      {
+        "severity": "medium",
+        "cwe": "CWE-20 (unvalidated suppressions.json structure)",
+        "real": true,
+        "rationale": "Valid hardening ask, low exploitability (file is repo-controlled and PR-reviewed)."
+      },
+      {
+        "severity": "low",
+        "cwe": "CWE-532 (suppression metadata in logs)",
+        "real": false,
+        "rationale": "Borderline noise — reason/ref are maintainer-authored public issue links."
+      }
+    ]
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL (correct)",
+    "output_file": "trial-2026-06-10.md",
+    "grading": "True positive on the HIGH — the agent blocked a sibling agent's PR for a real evasion vector. Severity calibration reasonable; LOW finding is mild over-reporting."
+  },
+  "notes": "Organic agent-on-agent gate: security-review correctly blocked the code agent's RCA suppression implementation (issue #33, PR #34, closed superseded). Hardened v2 re-requested on #33 with anchored-regex matching."
+}

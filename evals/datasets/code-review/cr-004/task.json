@@ -1,0 +1,21 @@
+{
+  "id": "cr-004",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1 (organic)",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/pull/36",
+  "label": {
+    "category": "real_defect",
+    "expected_verdict": "FAIL",
+    "rationale": "Third attempt at issue #33 again used substring matching, ignoring the anchored-regex requirement (the security-relevant defect)."
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL (correct overall)",
+    "output_file": "trial-2026-06-10.md",
+    "grading": "Mixed quality: correctly flagged the substring regression, but the lead claim (scan_log_file signature change breaks the caller at line 301-302) is factually wrong — the single call site is updated and errors.extend on the unpacked list is valid. Hallucinated-defect example for judge calibration: claims must be verified against the diff."
+  },
+  "notes": "Final agent attempt before human escalation on issue #33. Three-attempt arc: PR #34 (security FAIL, real), #35 (code-review FAIL, real), #36 (code-review FAIL, real reason + hallucinated reason)."
+}
