@@ -49,3 +49,14 @@ test('delete returns true for existing id and false for missing', () => {
   assert.equal(s.delete(1), true);
   assert.equal(s.delete(1), false);
 });
+
+test('update preserves completed when not provided in request', () => {
+  const s = new Store();
+  s.create('original');
+  // Mark as completed
+  s.update(1, 'original', true);
+  // Update title without providing completed field
+  const updated = s.update(1, 'updated', undefined);
+  assert.equal(updated.title, 'updated');
+  assert.equal(updated.completed, true, 'completed should remain true');
+});
