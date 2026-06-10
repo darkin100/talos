@@ -42,7 +42,9 @@ function handleSearch(req, res) {
     res.status(405).json({ error: 'method not allowed' });
     return 405;
   }
-  const q = (req.query && req.query.q) || '';
+  // Extract query parameter and coerce to string
+  const rawQ = (req.query && req.query.q) || '';
+  const q = String(rawQ).trim();
   res.status(200).json(store.search(q));
   return 200;
 }
