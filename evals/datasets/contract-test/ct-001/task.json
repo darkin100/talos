@@ -1,0 +1,26 @@
+{
+  "id": "ct-001",
+  "suite": "regression",
+  "agent": "contract-test",
+  "track": "wave1 (organic)",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/issues/38",
+  "target_sha": "deploy of fix/rca-suppressions merge",
+  "label": {
+    "violation": true,
+    "real": true,
+    "endpoint": "POST /api/healthz",
+    "expected": "405 method not allowed (consistent with all other routes)",
+    "actual": "200 OK",
+    "defect_file": "todo-api/api/handler.js (handleHealthz lacks a method guard)",
+    "rationale": "Verified live: POST /api/healthz -> 200, whereas DELETE /api/todos -> 405. handleHealthz unconditionally returns 200 for any method; every sibling handler guards method. Genuine contract gap."
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "issue": "https://github.com/darkin100/talos/issues/38",
+    "output_file": "trial-issue-38.md",
+    "test_counts": {"deterministic": 15, "llm_edge_case": 47, "violations": 1},
+    "grading": "True positive on the agent's first run. Minor severity but real and correctly raised. The recommended-fix code example is generic Express (.get/.all), not this repo's single-handler slug router — fix prose is right, fix snippet is idiomatic-mismatch (worth noting for the triage-quality grader)."
+  },
+  "notes": "First contract-test trial. Pre-existing defect surfaced organically while deploying the RCA suppression fix — not seeded."
+}
