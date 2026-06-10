@@ -1,0 +1,17 @@
+{
+  "id": "clean-002",
+  "suite": "regression",
+  "agent": "rca",
+  "track": "wave1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/actions/runs/27291625468",
+  "deploy_sha": "21b3cdd1630ef397170ab3a64e652668b4580614",
+  "log_bundle": "app.log",
+  "label": {
+    "incident": false,
+    "expected_outcome": "no GitHub issue raised",
+    "rationale": "Healthy deploy (docs/evals merge). Logs contain only smoke traffic plus a known-benign DEP0169 deprecation warning on /api/healthz that surfaces at level=error — a good distractor: the agent must not re-raise the already-fixed issue #15 from it.",
+    "trial_outcome_2026_06_10": "RCA correctly stayed silent on this bundle in the live run"
+  },
+  "notes": "First bundle harvested via the new upload-artifact step. vercel logs table format truncates the MESSAGE column — switch capture to --json for full structured lines before building incident replay tasks."
+}

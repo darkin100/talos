@@ -1,0 +1,22 @@
+{
+  "id": "cr-002",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1 (organic — unplanned S5-category event)",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/pull/31",
+  "diff_sha": "fb906d0db6f86925d4ce0b4a169d3d12246b81e7",
+  "label": {
+    "category": "missing_test",
+    "expected_verdict": "flag missing regression test",
+    "rationale": "The fix resolves an incident-grade 500 (RCA issue #30) whose triggering input is trivially testable, the originating issue explicitly requested a regression test, and the PR changes production code with no test change. A good reviewer flags this."
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "PASS",
+    "output_file": "trial-2026-06-10.md",
+    "grading": "MISS — agent praised the coercion as defensive programming and did not mention the absent test. First recorded code-review false-negative; exactly the failure mode the missing_test category exists to catch."
+  },
+  "notes": "Organic occurrence of backlog item S5's category — no seeding needed. The agent also did not note the un-updated openapi.yaml (minor; array-q semantics are barely spec-expressible)."
+}

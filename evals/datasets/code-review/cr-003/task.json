@@ -1,0 +1,21 @@
+{
+  "id": "cr-003",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1 (organic)",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/pull/35",
+  "label": {
+    "category": "real_defect",
+    "expected_verdict": "FAIL",
+    "rationale": "is_suppressed concatenates message+msg fields without a separator (cross-boundary false matches) and the implementation regressed the issue's anchored-regex requirement back to substring matching."
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL (correct)",
+    "output_file": "trial-2026-06-10.md",
+    "grading": "True positive: concatenation defect is real. Partial credit: did not flag the regression to substring matching vs the issue spec (the security-relevant miss); padded with weaker DRY/signature points."
+  },
+  "notes": "Second consecutive blocked attempt on issue #33 — cost_to_success signal. PR closed superseded by v3 (skeleton-level spec)."
+}

@@ -1,0 +1,30 @@
+{
+  "id": "incident-001",
+  "suite": "regression",
+  "agent": "rca",
+  "track": "wave1/I1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/actions/runs/27292330612",
+  "deploy_sha": "8bb498482bec189ce762bf5a68d7e09d0e9f8e6e",
+  "log_bundle": "app.log",
+  "seeding": "50x GET /api/todos/search?q=err&q=boom against the live preview during the post-promote soak window, interleaved with healthy GET /api/todos traffic",
+  "label": {
+    "incident": true,
+    "root_cause": "handleSearch passes req.query.q to store.search() without string coercion; a repeated query parameter arrives as an array, so q.toLowerCase() throws TypeError -> 500",
+    "cause_file": "todo-api/api/handler.js (handleSearch) / todo-api/lib/store.js:54 (throw site)",
+    "trigger": "repeated q query parameter (array), e.g. ?q=err&q=boom",
+    "expected_outcome": "GitHub issue raised citing the TypeError and the unvalidated q parameter; build marked failed"
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "issue": "https://github.com/darkin100/talos/issues/30",
+    "output_file": "trial-issue-30.md",
+    "grading": {
+      "top3_hypothesis_accuracy": "hit (top-1): unvalidated/uncoerced q in handleSearch -> store.search",
+      "evidence_citation": "cited TypeError with lib/store.js:54:22 and handler.js lines",
+      "nuance": "named 'undefined, null, or object' as likely non-string; did not explicitly identify the array-from-repeated-params trigger — acceptable, root cause and fix location correct",
+      "build_failed_as_designed": true
+    }
+  },
+  "notes": "First incident captured through the post-promote soak window (PR #29). Bundle is vercel logs --json (104 lines, 50x status 500)."
+}

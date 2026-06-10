@@ -59,7 +59,7 @@ real issues, fix via `@talos`, harvest as Talos-bench tasks.
 | ID | Issue to file | Ground truth |
 |---|---|---|
 | B1 ✅ *(done 2026-06-10: issue #25 → PR #26 → v48; harvested as talos-bench-001, cr-001, rn-001, rca/clean-001)* | `PUT /api/todos/:id` silently resets `completed` to `false` when the body omits it (`store.update` does `completed = !!completed`). Toggling a title wipes completion state. | Fix: preserve existing `completed` when absent. Test: update title only → completed unchanged. |
-| B2 | `GET /api/todos/search?q=a&q=b` returns 500 — repeated query param arrives as an array, `q.toLowerCase()` throws (`handler.js` `handleSearch`). | Fix: coerce/reject array `q` with 400. Test: repeated param → 400 (or first value), never 500. |
+| B2 ✅ *(done 2026-06-10: seeded incident → RCA issue #30 → PR #31 → fixed; harvested as talos-bench-002 + cr-002 — note the fix omitted the requested test and code-review passed it anyway, an organic `missing_test` miss)* | `GET /api/todos/search?q=a&q=b` returns 500 — repeated query param arrives as an array, `q.toLowerCase()` throws (`handler.js` `handleSearch`). | Fix: coerce/reject array `q` with 400. Test: repeated param → 400 (or first value), never 500. |
 | B3 | `POST /api/todos` accepts unbounded `title` length — no max, so a 10 MB title is stored and echoed on every list call. | Fix: 400 over a documented max (e.g. 500 chars); update `openapi.yaml` `maxLength`. |
 
 > B2 is also an **RCA incident seed**: deploy *without* the fix, hit the
@@ -123,7 +123,7 @@ Stored as `mutation.patch` + expected violation in `evals/datasets/contract-test
 
 | ID | Incident | Harvest |
 |---|---|---|
-| I1 | B2 deployed unfixed; traffic with repeated `q` params → 500s in logs | logs.jsonl + SHA + labelled cause ("array query param unhandled in handleSearch") |
+| I1 ✅ *(done 2026-06-10: 50x 500s seeded into the post-promote soak window; RCA top-1 hit with file:line evidence → incident-001. Bonus organic harvest: incident-002, RCA's first false positive — DEP0169 noise re-raised as #32 despite triage in #15; suppression fix = issue #33)* | B2 deployed unfixed; traffic with repeated `q` params → 500s in logs | logs.jsonl + SHA + labelled cause ("array query param unhandled in handleSearch") |
 | I2 | Deploy a build where `logEvent` throws on circular metadata (seeded in a branch) — every request 500s | logs + labelled cause |
 | — | Closed issue #15 (DEP0169 deprecation warning) | retro-harvest as the third replay task |
 | — | Two healthy deploys, logs captured | the 2 clean-log runs (FPR half) |
