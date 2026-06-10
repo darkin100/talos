@@ -1,0 +1,7 @@
+[
+  {
+    "pattern": "DEP0169",
+    "reason": "Vercel runtime bridge emits DEP0169 deprecation warning on /api/healthz; known-benign, not app-fixable",
+    "ref": "#15"
+  }
+]
