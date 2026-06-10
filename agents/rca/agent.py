@@ -112,12 +112,43 @@ def http_request(url: str, method: str = "GET", headers: dict | None = None, bod
         raise
 
 
-def scan_log_file(path: Path) -> list[dict]:
-    """Return all log entries with level error/critical/fatal."""
+def load_suppressions(path: Path) -> list[dict]:
+    """Load suppression patterns from suppressions.json.
+    
+    Returns a list of dicts with 'pattern', 'reason', and 'ref' keys.
+    If the file does not exist or cannot be parsed, returns an empty list.
+    """
+    if not path.exists():
+        return []
+    try:
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def is_suppressed(entry: dict, suppressions: list[dict]) -> tuple[bool, str | None]:
+    """Check if a log entry matches any suppression pattern.
+    
+    Returns (is_suppressed, pattern_used).
+    """
+    message = str(entry.get("message", ""))
+    for supp in suppressions:
+        pattern = supp.get("pattern", "")
+        if pattern and pattern in message:
+            return True, pattern
+    return False, None
+
+
+def scan_log_file(path: Path, suppressions: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    """Return all log entries with level error/critical/fatal, excluding suppressed ones.
+    
+    Returns (errors, suppression_counts) where suppression_counts maps pattern to hit count.
+    """
     if not path.exists():
         print(f"[rca] log file {path} does not exist; treating as no-errors", flush=True)
-        return []
+        return [], {}
     errors: list[dict] = []
+    suppression_counts: dict[str, int] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
         if not line:
@@ -130,8 +161,13 @@ def scan_log_file(path: Path) -> list[dict]:
             continue
         level = str(entry.get("level", "")).lower()
         if level in {"error", "critical", "fatal"} or entry.get("status", 0) >= 500:
-            errors.append(entry)
-    return errors
+            # Check if this error is suppressed
+            suppressed, pattern = is_suppressed(entry, suppressions)
+            if suppressed:
+                suppression_counts[pattern] = suppression_counts.get(pattern, 0) + 1
+            else:
+                errors.append(entry)
+    return errors, suppression_counts
 
 
 def query_phoenix_errors(base_url: str) -> list[dict]:
@@ -237,10 +273,27 @@ def main() -> int:
     commit_sha = os.environ.get("COMMIT_SHA", "")
     pr_number = os.environ.get("PR_NUMBER", "")
 
+    # Load suppressions from the same directory as this script
+    suppressions_file = Path(__file__).parent / "suppressions.json"
+    suppressions = load_suppressions(suppressions_file)
+
     print(f"[rca] scanning {log_file}", flush=True)
-    errors = scan_log_file(log_file)
+    errors, suppression_counts = scan_log_file(log_file, suppressions)
     if phoenix_url:
         errors.extend(query_phoenix_errors(phoenix_url))
+
+    # Log suppression hits
+    for pattern, count in suppression_counts.items():
+        # Find the reason and ref for this pattern
+        reason = ""
+        ref = ""
+        for supp in suppressions:
+            if supp.get("pattern") == pattern:
+                reason = supp.get("reason", "")
+                ref = supp.get("ref", "")
+                break
+        ref_str = f", see {ref}" if ref else ""
+        print(f"[rca] suppressed {count} event(s) ({pattern}{ref_str})", flush=True)
 
     if not errors:
         print("[rca] no errors detected — route to live cleared", flush=True)
