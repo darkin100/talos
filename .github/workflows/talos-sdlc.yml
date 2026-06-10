@@ -190,21 +190,6 @@ jobs:
             -e RELEASE_TAG \
             talos/release-notes:v1
 
-      - name: Capture Vercel logs
-        run: |
-          mkdir -p .logs
-          vercel logs ${{ steps.deploy.outputs.url }} --token=${{ secrets.VERCEL_TOKEN }} > .logs/app.log 2>&1 || true
-
-      # Persist the log bundle so eval datasets (RCA replay tasks in
-      # evals/datasets/rca/) can be harvested from any run after the fact.
-      - name: Upload log bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-logs-${{ github.run_id }}
-          path: .logs/app.log
-          retention-days: 30
-          if-no-files-found: warn
-
       - name: Run contract-test agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,6 +214,29 @@ jobs:
         run: |
           vercel promote ${{ steps.deploy.outputs.url }} --yes --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }}
           echo "Promoted ${{ steps.deploy.outputs.url }} to production"
+
+      # PRD: RCA "monitors logs for 60 seconds (configurable) after
+      # deployment". Capturing seconds after deploy meant RCA could only
+      # ever see smoke-test traffic and would never catch a production
+      # incident. Promote re-aliases the same deployment, so its runtime
+      # logs keep accumulating — soak, then capture.
+      - name: Soak for production traffic
+        run: sleep 75
+
+      - name: Capture Vercel logs
+        run: |
+          mkdir -p .logs
+          vercel logs ${{ steps.deploy.outputs.url }} --json --token=${{ secrets.VERCEL_TOKEN }} > .logs/app.log 2>&1 || true
+
+      # Persist the log bundle so eval datasets (RCA replay tasks in
+      # evals/datasets/rca/) can be harvested from any run after the fact.
+      - name: Upload log bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-logs-${{ github.run_id }}
+          path: .logs/app.log
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Run RCA agent
         env:
