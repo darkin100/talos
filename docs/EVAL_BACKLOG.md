@@ -145,6 +145,37 @@ fixtures. File only once Wave 1 is in `evals/datasets/`.
 - Adversarial release-note inputs: a PR with a misleading title, a fixup-only
   PR (the strategy's saturation-watch cases)
 
+## Harness-failure log (feeds EVAL_STRATEGY.md "harness vs agent failure")
+
+Failures observed *while generating eval data* on 2026-06-10 — none of which
+reflect agent answer-quality, all of which a green-checkmark dashboard would
+miss. The strategy needs to score agents only on runs that actually executed:
+
+1. **Platform outage** — GitHub API auth incident (erroneous 401s) killed the
+   first code-agent run after it had already pushed its branch.
+2. **Repo misconfiguration** — "Allow GitHub Actions to create PRs" was off, so
+   `gh pr create` failed; masked by (1) on the first attempt.
+3. **Agent-harness hang** — Pi stalled indefinitely on issue #38 (run
+   27295653691 cancelled after 30+ min); fixed by human fallback (PR #41).
+
+4. **Docker Hub flake** — `Build agent images` timed out pulling
+   `python:3.12-slim` (transient registry i/o timeout); cleared on rerun.
+5. **Packaging gap (passed all gates, failed in prod)** — the RCA suppression
+   rules (#33/#37) worked in local replay and passed code-review,
+   security-review, and unit tests, but `agents/rca/Dockerfile` copied only
+   `agent.py`, not `suppressions.json` — so the deployed image loaded 0 rules
+   and re-raised DEP0169 as #42. Neither review agent flagged the cross-file
+   omission. This is the strongest argument in the repo for grading
+   **real-deploy outcomes**, not just unit tests: no test that imports the
+   module can see a missing `COPY` line.
+
+Implication for the strategy: distinguish *infra/harness failure* from *agent
+failure* before computing pass rates; add timeouts + bounded-retry +
+human-escalation as first-class harness behaviour (exercised manually on #33
+and #38); and keep at least one **outcome grader that exercises the built
+artefact** (the deployed container), since #5 is invisible to every
+source-level grader.
+
 ## Working agreement
 
 1. One item at a time, through the real pipeline — the pipeline run *is* the

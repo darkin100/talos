@@ -1,0 +1,75 @@
+diff --git a/todo-api/api/handler.js b/todo-api/api/handler.js
+index d22350c..c0338d9 100644
+--- a/todo-api/api/handler.js
++++ b/todo-api/api/handler.js
+@@ -14,6 +14,10 @@ import { store } from '../lib/store.js';
+ import { logEvent } from '../lib/logging.js';
+ 
+ function handleHealthz(req, res) {
++  if (req.method !== 'GET') {
++    res.status(405).json({ error: 'method not allowed' });
++    return 405;
++  }
+   res.status(200).json({ status: 'ok' });
+   return 200;
+ }
+diff --git a/todo-api/openapi.yaml b/todo-api/openapi.yaml
+index 65afe3e..ca575df 100644
+--- a/todo-api/openapi.yaml
++++ b/todo-api/openapi.yaml
+@@ -18,6 +18,12 @@ paths:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/HealthResponse'
++        '405':
++          description: Method not allowed
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/Error'
+ 
+   /api/todos:
+     get:
+diff --git a/todo-api/test/handler.test.js b/todo-api/test/handler.test.js
+new file mode 100644
+index 0000000..6443f90
+--- /dev/null
++++ b/todo-api/test/handler.test.js
+@@ -0,0 +1,37 @@
++import { test } from 'node:test';
++import { strict as assert } from 'node:assert';
++
++import handler from '../api/handler.js';
++
++// Minimal Express/Vercel-style res double: records status + json body.
++function mockRes() {
++  return {
++    statusCode: null,
++    body: undefined,
++    status(code) {
++      this.statusCode = code;
++      return this;
++    },
++    json(payload) {
++      this.body = payload;
++      return this;
++    },
++    end() {
++      return this;
++    },
++  };
++}
++
++test('GET /api/healthz returns 200 ok', () => {
++  const res = mockRes();
++  handler({ method: 'GET', query: { slug: 'healthz' } }, res);
++  assert.equal(res.statusCode, 200);
++  assert.deepEqual(res.body, { status: 'ok' });
++});
++
++test('POST /api/healthz returns 405 (method guard)', () => {
++  const res = mockRes();
++  handler({ method: 'POST', query: { slug: 'healthz' } }, res);
++  assert.equal(res.statusCode, 405);
++  assert.deepEqual(res.body, { error: 'method not allowed' });
++});
