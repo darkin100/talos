@@ -1,0 +1,21 @@
+{
+  "id": "cr-001",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1/B1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/pull/26",
+  "diff_sha": "cc2f4f32cc9abfc9de2cc20a64517a43ee86b51e",
+  "label": {
+    "category": "none",
+    "expected_verdict": "PASS",
+    "rationale": "PR contains a correct, minimal bug fix with a regression test; a good reviewer passes it. Balanced-suite entry: the agent must NOT manufacture findings here."
+  },
+  "reference_trial": {
+    "date": "2026-06-10",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "PASS",
+    "output_file": "trial-2026-06-10.md",
+    "security_review": "silent (no findings) — also correct"
+  }
+}

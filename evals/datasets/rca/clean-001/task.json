@@ -1,0 +1,15 @@
+{
+  "id": "clean-001",
+  "suite": "regression",
+  "agent": "rca",
+  "track": "wave1/B1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/actions/runs/27291180591",
+  "deploy_sha": "b13c0b589733e96c5fd4f337ecf832d85cad4219",
+  "label": {
+    "incident": false,
+    "expected_outcome": "no GitHub issue raised",
+    "rationale": "Healthy deploy of the issue-25 fix; deploy-and-verify succeeded and RCA found no errors. One of the two clean-log runs required by the MVP cut (FPR half of the suite)."
+  },
+  "note": "Log bundle not yet captured locally — the workflow's .logs/app.log is ephemeral. TODO: have the SDLC workflow upload logs as an artifact so clean and incident bundles can be harvested (needed before rca tasks are replayable)."
+}

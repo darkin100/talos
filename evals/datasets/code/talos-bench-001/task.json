@@ -1,0 +1,23 @@
+{
+  "id": "talos-bench-001",
+  "suite": "capability",
+  "agent": "code",
+  "track": "wave1/B1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/issues/25",
+  "pr": "https://github.com/darkin100/talos/pull/26",
+  "base_sha": "188dda5",
+  "solution_sha": "b13c0b589733e96c5fd4f337ecf832d85cad4219",
+  "task": "PUT /api/todos/:id silently resets completed to false when the request body omits it. Fix so title-only updates preserve completion state.",
+  "label": {
+    "type": "fix-a-bug",
+    "defect_file": "todo-api/lib/store.js",
+    "defect_line_at_base": "existing.completed = !!completed;",
+    "hidden_test": "update preserves completed when not provided in request (test/store.test.js)"
+  },
+  "grader": {
+    "primary": "tests_pass@1 on hidden test at solution SHA",
+    "sanity": "file-overlap Jaccard vs merged diff (store.js expected)"
+  },
+  "provenance": "Genuine bug found by code inspection; resolved end-to-end by the Talos pipeline on first attempt (run 27291031540). Two earlier runs failed on infrastructure, not agent quality: GitHub auth incident (run 27286307575), missing Actions PR-creation permission (run 27290847419)."
+}
