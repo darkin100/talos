@@ -142,6 +142,9 @@ export default function handler(req, res) {
       status = handleTodos(req, res);
       return;
     }
+    if (slug.length === 2 && slug[0] === 'todos' && slug[1] === 'count') {
+      status = handleCount(req, res);
+    }
     if (slug.length === 2 && slug[0] === 'todos' && slug[1] === 'search') {
       status = handleSearch(req, res);
       return;
