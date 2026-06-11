@@ -7,10 +7,10 @@
 // res.json) for the local-demo and contributors. It also serves the
 // static files under `public/` the same way Vercel does in production.
 
-import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { URL } from 'node:url';
+import { createServer } from 'node:http';
 import { dirname, join, normalize, resolve } from 'node:path';
+import { URL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 
 import handler from './api/handler.js';
