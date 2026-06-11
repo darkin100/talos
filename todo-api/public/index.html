@@ -195,7 +195,8 @@
 
           const title = document.createElement('span');
           title.className = 'title';
-          title.textContent = t.title;
+          // Render the title as rich HTML so links/emphasis in todos show up.
+          title.innerHTML = t.title;
 
           const del = document.createElement('button');
           del.type = 'button';
