@@ -1,0 +1,105 @@
+name: Talos Evals
+
+# Phase 0 gate from docs/EVAL_STRATEGY.md §3.4: when a PR touches an agent,
+# replay that agent's regression suite and post the per-category results as a
+# PR comment. Path filter is agents/** only — prompts live inside
+# agents/*/agent.py, there is no separate prompts/ tree (TODO.md #10).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "agents/**"
+      - "evals/**"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "suite to run (regression | capability | all)"
+        default: "regression"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect affected agents
+        id: affected
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Run only the suites whose agent code changed; a change under
+          # evals/ (runner or datasets) reruns everything.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "args=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          CHANGED=$(gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --name-only)
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -q "^evals/"; then
+            echo "args=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          AGENTS=$(echo "$CHANGED" | grep "^agents/" | cut -d/ -f2 | sort -u)
+          ARGS=""
+          for a in $AGENTS; do
+            # code (talos-bench) replays in the nightly harness, not here
+            [ "$a" = "code" ] && continue
+            ARGS="$ARGS --agent $a"
+          done
+          if [ -z "$ARGS" ] && [ -n "$AGENTS" ]; then
+            echo "only the code agent changed — nothing to replay per-PR"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "args=$ARGS" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        if: steps.affected.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runner deps
+        if: steps.affected.outputs.skip != 'true'
+        run: pip install -r evals/requirements.txt
+
+      - name: Run eval suite
+        if: steps.affected.outputs.skip != 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          python -m pytest evals -v \
+            --suite "${{ github.event.inputs.suite || 'regression' }}" \
+            ${{ steps.affected.outputs.args }}
+
+      - name: Render report
+        if: always() && steps.affected.outputs.skip != 'true'
+        run: python evals/report.py | tee eval-report.md
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request' && steps.affected.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Update the existing eval comment instead of stacking new ones.
+          PR=${{ github.event.pull_request.number }}
+          MARKER='<!-- talos:evals -->'
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING" \
+              -F body=@eval-report.md
+          else
+            gh pr comment "$PR" --repo ${{ github.repository }} --body-file eval-report.md
+          fi
+
+      - name: Upload results artifact
+        if: always() && steps.affected.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: evals/.results/results.json
+          if-no-files-found: ignore

@@ -14,6 +14,8 @@ Environment:
     PHOENIX_URL           optional Phoenix base URL (e.g. http://phoenix:6006)
     COMMIT_SHA            optional sha to include in the issue body
     PR_NUMBER             optional PR number to cross-reference in the issue
+    DRY_RUN               (optional) if set to a truthy value, do not create the
+                          GitHub issue; emit the artifact to stdout instead
     ARIZE_SPACE_ID        (optional) Arize AX space id; enables tracing if set
     ARIZE_API_KEY         (optional) Arize AX API key; required with ARIZE_SPACE_ID
     ARIZE_PROJECT_NAME    (optional) Arize project name (default: talos-rca)
@@ -92,6 +94,20 @@ except ImportError:  # tracing deps absent — degrade to a no-op
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+ARTIFACT_BEGIN = "===TALOS_EVAL_ARTIFACT_BEGIN==="
+ARTIFACT_END = "===TALOS_EVAL_ARTIFACT_END==="
+
+
+def dry_run_enabled() -> bool:
+    return os.environ.get("DRY_RUN", "").lower() not in {"", "0", "false"}
+
+
+def emit_artifact(artifact: dict) -> None:
+    """Print the would-be side effect (PR comment, issue, …) for the eval runner."""
+    print(ARTIFACT_BEGIN, flush=True)
+    print(json.dumps(artifact), flush=True)
+    print(ARTIFACT_END, flush=True)
+
 
 SYSTEM_PROMPT = """You are a Site Reliability Engineer performing root-cause
 analysis. Given a set of error log lines and a snippet of the source code that
@@ -289,8 +305,9 @@ def create_issue(token: str, repo: str, title: str, body: str) -> dict:
 
 
 def main() -> int:
-    token = env("GITHUB_TOKEN")
-    repo = env("GITHUB_REPOSITORY")
+    if not dry_run_enabled():
+        token = env("GITHUB_TOKEN")
+        repo = env("GITHUB_REPOSITORY")
     openrouter_key = env("OPENROUTER_API_KEY")
     model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
     log_file = Path(os.environ.get("LOG_FILE", "/logs/app.log"))
@@ -313,6 +330,8 @@ def main() -> int:
         print("[rca] no errors detected — route to live cleared", flush=True)
         root.set_attribute("output.value", json.dumps({"verdict": "clean", "errors": 0}))
         root.set_attribute("output.mime_type", "application/json")
+        if dry_run_enabled():
+            emit_artifact({"verdict": "clean", "errors": 0, "suppressed": suppressed})
         return 0
 
     print(f"[rca] {len(errors)} error events detected; performing RCA", flush=True)
@@ -333,6 +352,16 @@ def main() -> int:
         body += f"\n\n---\nCommit: `{commit_sha}`"
     if pr_number:
         body += f"\nTriggering PR: #{pr_number}"
+
+    if dry_run_enabled():
+        emit_artifact({"verdict": "errors", "errors": len(errors), "title": title, "body": body})
+        root.set_attribute(
+            "output.value",
+            json.dumps({"verdict": "errors", "errors": len(errors), "title": title, "dry_run": True}),
+        )
+        root.set_attribute("output.mime_type", "application/json")
+        print("[rca] dry run — issue not created; route to live would pause", flush=True)
+        return 1
 
     issue = create_issue(token, repo, title, body)
     root.set_attribute(
