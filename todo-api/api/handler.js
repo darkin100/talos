@@ -93,8 +93,8 @@ function handleTodoById(req, res, rawId) {
       res.status(404).json({ error: 'todo not found' });
       return 404;
     }
-    res.status(204).end();
-    return 204;
+    res.status(200).json({ deleted: true, id });
+    return 200;
   }
   res.status(405).json({ error: 'method not allowed' });
   return 405;
