@@ -51,9 +51,10 @@ export class Store {
   // An empty query returns no results to avoid duplicating the list endpoint.
   search(q) {
     if (!q) return [];
-    const needle = q.toLowerCase();
+    // Match titles containing the query.
+    const needle = q;
     return [...this.todos.values()].filter((t) =>
-      t.title.toLowerCase().includes(needle),
+      t.title.includes(needle),
     );
   }
 }
