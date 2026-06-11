@@ -49,7 +49,7 @@ function handleSearch(req, res) {
   // Extract query parameter and coerce to string
   const rawQ = (req.query && req.query.q) || '';
   const q = String(rawQ).trim();
-  res.status(200).json(store.search(q));
+  res.status(200).json({ results: store.search(q) });
   return 200;
 }
 
