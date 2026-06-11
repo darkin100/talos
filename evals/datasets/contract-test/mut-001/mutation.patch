@@ -1,9 +1,9 @@
 diff --git a/todo-api/api/handler.js b/todo-api/api/handler.js
-index 8aef42f..6c90f4b 100644
+index 692e128..f31541e 100644
 --- a/todo-api/api/handler.js
 +++ b/todo-api/api/handler.js
-@@ -34,8 +34,8 @@ function handleTodos(req, res) {
-       res.status(400).json({ error: 'title is required' });
+@@ -41,8 +41,8 @@ function handleTodos(req, res) {
+       res.status(400).json({ error: `title exceeds maximum length of ${MAX_TITLE_LENGTH}` });
        return 400;
      }
 -    res.status(201).json(store.create(title));
