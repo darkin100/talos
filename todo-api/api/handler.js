@@ -78,7 +78,7 @@ function handleTodoById(req, res, rawId) {
       res.status(400).json({ error: 'invalid body' });
       return 400;
     }
-    const todo = store.update(id, title, completed);
+    const todo = store.update(id, req.body);
     if (!todo) {
       logEvent('error', 'todo not found', { status: 404, id });
       res.status(404).json({ error: 'todo not found' });

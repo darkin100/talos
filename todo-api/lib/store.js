@@ -32,14 +32,11 @@ export class Store {
     return todo;
   }
 
-  update(id, title, completed) {
+  update(id, patch) {
     const current = this.todos.get(id);
     if (!current) return null;
-    current.title = title;
-    // Only update completed if explicitly provided (not undefined)
-    if (completed !== undefined) {
-      current.completed = !!completed;
-    }
+    // Apply all provided fields in one go — simpler than enumerating them.
+    Object.assign(current, patch);
     return current;
   }
 
