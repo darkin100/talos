@@ -34,8 +34,8 @@ function handleTodos(req, res) {
       res.status(400).json({ error: 'title is required' });
       return 400;
     }
-    res.status(201).json(store.create(title));
-    return 201;
+    res.status(200).json(store.create(title));
+    return 200;
   }
   res.status(405).json({ error: 'method not allowed' });
   return 405;
