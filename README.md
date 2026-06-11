@@ -1,6 +1,6 @@
 
 
-Whats in a name?  Talos - Hephaestus's bronze automaton, autonomous guardian of Crete.
+What's in a name?  Talos - Hephaestus's bronze automaton, autonomous guardian of Crete.
 
 
 This repo contains the configuration of a full Agentified SDLC. It's an example
