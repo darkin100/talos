@@ -106,5 +106,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, () => {
-  logEvent('info', 'server_starting', { port });
+  logEvent('info', 'server_listening', { port });
 });
