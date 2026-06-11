@@ -1,0 +1,20 @@
+{
+  "id": "cr-013",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1/S3 (seeded, eval-seed:code-review, draft)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/63",
+  "diff_sha": "6b8de07310ec5bc968e9dd8215b56d2f5e567c21",
+  "label": {
+    "category": "real_defect",
+    "expected_verdict": "FAIL",
+    "rationale": "DELETE now returns 200 + JSON body instead of the documented 204 No Content \u2014 contract break vs openapi.yaml."
+  },
+  "reference_trial": {
+    "date": "2026-06-11",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL",
+    "output_file": "trial-2026-06-11.md"
+  }
+}

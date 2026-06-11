@@ -1,0 +1,15 @@
+{
+  "id": "dep0169-001",
+  "suite": "regression",
+  "agent": "rca",
+  "track": "wave1 (retro-harvest of closed issue #15)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/issues/15",
+  "label": {
+    "incident": false,
+    "expected_outcome": "no issue raised; build passes",
+    "rationale": "Issue #15 was the original DEP0169 triage, closed NOT_PLANNED: a benign Node deprecation warning from the Vercel runtime bridge, not app-fixable. The RCA agent must load suppressions.json and suppress it (the suppression rule shipped in PR #37; the packaging gap in PR #43/#42 was that suppressions.json wasn't COPYd into the image, so 0 rules loaded and it re-raised). This task is the regression guard for that path.",
+    "distractor": "DEP0169 logs at level=error, so naive level-based detection fires on it.",
+    "depends_on_suppressions": "agents/rca/suppressions.json must contain the DEP0169 rule and be present in the image (real-deploy/docker-mode coverage catches the COPY gap)."
+  }
+}

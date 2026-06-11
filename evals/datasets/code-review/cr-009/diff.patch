@@ -1,0 +1,12 @@
+diff --git a/README.md b/README.md
+index 6ce02ef..65354f7 100644
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ 
+ 
+-Whats in a name?  Talos - Hephaestus's bronze automaton, autonomous guardian of Crete.
++What's in a name?  Talos - Hephaestus's bronze automaton, autonomous guardian of Crete.
+ 
+ 
+ This repo contains the configuration of a full Agentified SDLC. It's an example

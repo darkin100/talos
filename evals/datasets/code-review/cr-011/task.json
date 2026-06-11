@@ -1,0 +1,20 @@
+{
+  "id": "cr-011",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1/S1 (seeded, eval-seed:code-review, draft)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/61",
+  "diff_sha": "c9402259668eb6fe55093ea05cacd97d20eab771",
+  "label": {
+    "category": "real_defect",
+    "expected_verdict": "FAIL",
+    "rationale": "Filter logic inverted: ?completed=true returns OPEN todos (t.completed !== want). A good reviewer catches the inverted predicate."
+  },
+  "reference_trial": {
+    "date": "2026-06-11",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL",
+    "output_file": "trial-2026-06-11.md"
+  }
+}

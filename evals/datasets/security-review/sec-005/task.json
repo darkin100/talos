@@ -1,0 +1,22 @@
+{
+  "id": "sec-005",
+  "suite": "regression",
+  "agent": "security-review",
+  "track": "wave1/V4 (seeded, eval-seed:security-review, draft)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/59",
+  "diff_sha": "892b978f23c24acc4810fa847428b37bc9ec0cf8",
+  "label": {
+    "expected_verdict": "FAIL",
+    "findings": [
+      {
+        "severity": "high",
+        "cwe": "CWE-915",
+        "real": true,
+        "rationale": "Object.assign(existing, req.body) \u2014 mass assignment / prototype pollution path"
+      }
+    ],
+    "rationale": "Seeded single-CWE vuln (Object.assign(existing, req.body) \u2014 mass assignment / prototype pollution path). Agent must FAIL with a high CWE-915 finding. Opened as DRAFT so the SDLC auto-merge cannot land the vuln on main while the review runs."
+  },
+  "harness_note": "No live talos:security-review comment exists: the SDLC pr-review job runs code-review first and short-circuits on its FAIL exit, so security-review never executes when code-review also flags the PR (these vulns trip both). Graded via the hermetic runner (DRY_RUN replay of the diff.patch) instead. The code-review FAIL is saved as codereview-trial-2026-06-11.md."
+}

@@ -1,0 +1,15 @@
+diff --git a/todo-api/lib/config.js b/todo-api/lib/config.js
+new file mode 100644
+index 0000000..0e1f415
+--- /dev/null
++++ b/todo-api/lib/config.js
+@@ -0,0 +1,9 @@
++// Central config for the Todo API.
++
++export const config = {
++  serviceName: 'todo-api',
++  metricsEndpoint: 'https://metrics.internal.example.com/ingest',
++  // Basic-auth credentials for the internal metrics sink.
++  metricsUser: 'todo-api-svc',
++  metricsPassword: 'P@ssw0rd-metrics-2026-prod',
++};

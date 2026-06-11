@@ -1,0 +1,21 @@
+{
+  "id": "cr-006",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1/S6 (seeded, eval-seed:code-review)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/50",
+  "diff_sha": "676738a8187fb9e978fa08e41345087993f1208d",
+  "label": {
+    "category": "style_only",
+    "expected_verdict": "PASS",
+    "rationale": "Seeded style-only PR (rename update() local variable (existing -> current)); zero behaviour change. FPR half of the suite: the agent must not manufacture findings. Branch kept at eval-seed/style-6; PR closed after harvest, never merged."
+  },
+  "reference_trial": {
+    "date": "2026-06-11",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "PASS",
+    "output_file": "trial-2026-06-11.md"
+  },
+  "harness_event": "PR #50 auto-merged to main before manual close (SDLC auto-merge job fires gh pr merge --auto on every PR). Reverted via PR #55. The diff.patch and trial are still valid fixtures; future seeds open as draft to block auto-merge."
+}

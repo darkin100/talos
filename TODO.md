@@ -54,9 +54,12 @@ item at a time; tick when the doc (or repo) reflects the change.
   match Phoenix's documented surface (`phoenix.experiments.run_experiment`,
   evals library). Pin it to a tested Phoenix version or label it pseudocode.
 
-- [ ] **7. Pick one CI eval tool.** Phase 0 brings in DeepEval *and* Phoenix.
-  Drop DeepEval unless a specific gate is materially cheaper with it — plain
-  pytest + Phoenix experiments covers the need and keeps the pattern clean.
+- [x] **7. Pick one CI eval tool.** *(Done 2026-06-11: the `evals/` runner is
+  plain pytest — no DeepEval. Strategy §4 Phase 0 updated; Phoenix deferred
+  until the agents trace to it rather than Arize AX.)* Phase 0 brings in
+  DeepEval *and* Phoenix. Drop DeepEval unless a specific gate is materially
+  cheaper with it — plain pytest + Phoenix experiments covers the need and
+  keeps the pattern clean.
 
 - [ ] **8. Split harness metrics (§3.2) into "demoable now" vs "needs scale".**
   Override rate, gate escape rate, and CFR need human reviewers and deploy
@@ -70,9 +73,11 @@ item at a time; tick when the doc (or repo) reflects the change.
   biases toward missing regressions — fine for a gate, but say so and specify
   what happens on disagreement (currently undefined).
 
-- [ ] **10. Fix the per-PR trigger path filter.** `agents/**` or `prompts/**` —
-  prompts live inside `agents/*/`, so `prompts/**` matches nothing. Check
-  against the actual layout.
+- [x] **10. Fix the per-PR trigger path filter.** *(Done 2026-06-11:
+  `.github/workflows/talos-evals.yml` triggers on `agents/**` (plus `evals/**`)
+  only; the `prompts/**` glob is gone. §3.4 cadence table updated to match.)*
+  `agents/**` or `prompts/**` — prompts live inside `agents/*/`, so `prompts/**`
+  matches nothing. Check against the actual layout.
 
 ## Framing
 

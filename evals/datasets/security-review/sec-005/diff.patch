@@ -1,0 +1,35 @@
+diff --git a/todo-api/api/handler.js b/todo-api/api/handler.js
+index 8aef42f..c18625b 100644
+--- a/todo-api/api/handler.js
++++ b/todo-api/api/handler.js
+@@ -78,7 +78,7 @@ function handleTodoById(req, res, rawId) {
+       res.status(400).json({ error: 'invalid body' });
+       return 400;
+     }
+-    const todo = store.update(id, title, completed);
++    const todo = store.update(id, req.body);
+     if (!todo) {
+       logEvent('error', 'todo not found', { status: 404, id });
+       res.status(404).json({ error: 'todo not found' });
+diff --git a/todo-api/lib/store.js b/todo-api/lib/store.js
+index a24dc08..e7ef831 100644
+--- a/todo-api/lib/store.js
++++ b/todo-api/lib/store.js
+@@ -32,14 +32,11 @@ export class Store {
+     return todo;
+   }
+ 
+-  update(id, title, completed) {
++  update(id, patch) {
+     const current = this.todos.get(id);
+     if (!current) return null;
+-    current.title = title;
+-    // Only update completed if explicitly provided (not undefined)
+-    if (completed !== undefined) {
+-      current.completed = !!completed;
+-    }
++    // Apply all provided fields in one go — simpler than enumerating them.
++    Object.assign(current, patch);
+     return current;
+   }
+ 

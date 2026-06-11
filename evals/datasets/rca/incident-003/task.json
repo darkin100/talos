@@ -1,0 +1,22 @@
+{
+  "id": "incident-003",
+  "suite": "regression",
+  "agent": "rca",
+  "track": "wave1/I2 (seeded incident)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/blob/main/docs/EVAL_BACKLOG.md (Track I, I2)",
+  "label": {
+    "incident": true,
+    "root_cause": "logEvent() calls JSON.stringify on a metadata object containing a circular reference; the throw propagates out of the request handler, so every POST /api/todos returns 500.",
+    "cause_file": "todo-api/lib/logging.js:13 (JSON.stringify in logEvent) reached from todo-api/api/handler.js:33",
+    "evidence_tokens": [
+      "logging.js",
+      "logEvent",
+      "circular",
+      "handler.js"
+    ],
+    "trigger": "any request whose log metadata is circular (seeded build)",
+    "expected_outcome": "GitHub issue raised citing the circular-structure TypeError in logEvent; build marked failed.",
+    "provenance": "Seeded log bundle (no live deploy) authored 2026-06-11, faithful to backlog item I2. Companion to incident-001 as the 2nd real-incident replay; ground truth known by construction."
+  }
+}

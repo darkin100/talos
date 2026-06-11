@@ -1,0 +1,68 @@
+diff --git a/evals/datasets/contract-test/ct-001/task.json b/evals/datasets/contract-test/ct-001/task.json
+new file mode 100644
+index 0000000..271d5e2
+--- /dev/null
++++ b/evals/datasets/contract-test/ct-001/task.json
+@@ -0,0 +1,26 @@
++{
++  "id": "ct-001",
++  "suite": "regression",
++  "agent": "contract-test",
++  "track": "wave1 (organic)",
++  "created": "2026-06-10",
++  "source": "https://github.com/darkin100/talos/issues/38",
++  "target_sha": "deploy of fix/rca-suppressions merge",
++  "label": {
++    "violation": true,
++    "real": true,
++    "endpoint": "POST /api/healthz",
++    "expected": "405 method not allowed (consistent with all other routes)",
++    "actual": "200 OK",
++    "defect_file": "todo-api/api/handler.js (handleHealthz lacks a method guard)",
++    "rationale": "Verified live: POST /api/healthz -> 200, whereas DELETE /api/todos -> 405. handleHealthz unconditionally returns 200 for any method; every sibling handler guards method. Genuine contract gap."
++  },
++  "reference_trial": {
++    "date": "2026-06-10",
++    "issue": "https://github.com/darkin100/talos/issues/38",
++    "output_file": "trial-issue-38.md",
++    "test_counts": {"deterministic": 15, "llm_edge_case": 47, "violations": 1},
++    "grading": "True positive on the agent's first run. Minor severity but real and correctly raised. The recommended-fix code example is generic Express (.get/.all), not this repo's single-handler slug router — fix prose is right, fix snippet is idiomatic-mismatch (worth noting for the triage-quality grader)."
++  },
++  "notes": "First contract-test trial. Pre-existing defect surfaced organically while deploying the RCA suppression fix — not seeded."
++}
+diff --git a/evals/datasets/contract-test/ct-001/trial-issue-38.md b/evals/datasets/contract-test/ct-001/trial-issue-38.md
+new file mode 100644
+index 0000000..63448f4
+--- /dev/null
++++ b/evals/datasets/contract-test/ct-001/trial-issue-38.md
+@@ -0,0 +1,30 @@
++## Issue
++The `/api/healthz` endpoint is accepting POST requests when it should only allow GET requests.
++
++## Details
++- **Endpoint**: `POST /api/healthz`
++- **Expected status**: 405 Method Not Allowed
++- **Actual status**: 200 OK
++- **Actual response**: `{"status": "ok"}`
++
++## Root Cause
++The healthz endpoint handler is not properly restricting HTTP methods. It's currently accepting all request methods (or at least POST) instead of limiting to GET only.
++
++## Recommended Fix
++1. Add HTTP method validation to the `/api/healthz` route handler
++2. Return 405 Method Not Allowed for any non-GET requests
++3. Ensure the route is configured to only accept GET method (e.g., using `.get()` instead of `.all()` or `.use()`)
++
++## Example
++```javascript
++// Instead of accepting all methods
++app.all('/api/healthz', handler);
++
++// Use only GET
++app.get('/api/healthz', handler);
++```
++
++---
++Deployment: https://talos-2kiq1eyz0-darkin100s-projects.vercel.app
++Commit: `b1542389f6eb12d8e815cb754fe7a240e0cc5c7c`
++Triggering PR: #37

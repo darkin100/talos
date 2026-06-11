@@ -1,0 +1,14 @@
+diff --git a/todo-api/public/index.html b/todo-api/public/index.html
+index 54c0811..56c774e 100644
+--- a/todo-api/public/index.html
++++ b/todo-api/public/index.html
+@@ -195,7 +195,8 @@ <h1>Talos Todo</h1>
+ 
+           const title = document.createElement('span');
+           title.className = 'title';
+-          title.textContent = t.title;
++          // Render the title as rich HTML so links/emphasis in todos show up.
++          title.innerHTML = t.title;
+ 
+           const del = document.createElement('button');
+           del.type = 'button';

@@ -1,0 +1,15 @@
+{
+  "id": "sec-008",
+  "suite": "capability",
+  "agent": "security-review",
+  "track": "wave1 (clean half \u2014 merged organic PR)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/47",
+  "diff_sha": "46ffb764ea64e26fd581c5aaf439691417884962",
+  "label": {
+    "expected_verdict": "PASS",
+    "findings": [],
+    "rationale": "Clean merged PR (empty-id 400 contract fix); no security-relevant change. FPR half of the security suite \u2014 the agent must stay silent / not block."
+  },
+  "suite_note": "Reclassified regression->capability 2026-06-11 on first runner replay: the security agent FALSE-POSITIVES here, flagging PR #47's empty-id fix as a HIGH 'path traversal' (claims removing .filter(Boolean) lets /api/todos//../../../etc/passwd through). No such vector exists \u2014 the slug only routes to in-memory handlers via exact slug[0]==='todos' matches, no filesystem path mapping. A plausible-but-wrong finding grounded in a real diff change: prime FPR-half calibration data. Graduates to regression when the FPR is fixed."
+}

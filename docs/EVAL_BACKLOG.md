@@ -42,14 +42,21 @@ evals/datasets/
 The first wave produces precisely what the six "MVP first cut" rows in
 EVAL_STRATEGY.md §2 require. Nothing more.
 
-| MVP requirement (from strategy) | Backlog items that produce it |
-|---|---|
-| code: 5 fix-a-bug tasks | B1–B3 + F1, F3 (bugs + small features below) |
-| code-review: 5 real-defect + 5 style-only PRs | S1–S5 (seeded defects) + S6–S10 (style-only) |
-| security: 5 CWE flows + 5 clean PRs | V1–V5 (seeded vulns); clean = any 5 merged Wave-1 PRs |
-| contract-test: 3 mutation seeds | M1–M3 |
-| release-notes: 5 reference notes | hand-edit the notes generated for the 5 organic merges |
-| rca: 3 replay tasks + 2 clean runs | I1–I2 + closed issue #15; clean = 2 healthy deploys |
+**Status (2026-06-11): Wave 1 harvested and runnable.** All six MVP cuts are
+populated in `evals/datasets/` and replay green through the `evals/` pytest
+runner (`pytest evals`). The runner, graders, the per-PR CI workflow
+(`.github/workflows/talos-evals.yml`), and hermetic `diff.patch`/`input.json`
+inputs land alongside the data — this *is* the EVAL_STRATEGY.md Phase 0
+deliverable. See `evals/README.md` for how each agent replays.
+
+| MVP requirement (from strategy) | Backlog items that produce it | Status |
+|---|---|---|
+| code: 5 fix-a-bug tasks | B1–B2 + retro-harvest #46/#38; B3 live | talos-bench-001..004 ✅, B3 (#66) in flight |
+| code-review: 5 real-defect + 5 style-only PRs | S1–S5 (seeded defects) + S6–S10 (style-only) | cr-006..015 ✅ (+ organic cr-001..005) |
+| security: 5 CWE flows + 5 clean PRs | V1–V5 (seeded vulns) + 5 merged clean PRs | sec-002..011 ✅ (+ organic sec-001) |
+| contract-test: 3 mutation seeds | M1–M3 | mut-001..003 ✅ (+ organic ct-001) |
+| release-notes: 5 reference notes | rn-001 + 4 retro-harvested merges | rn-001..005 ✅ |
+| rca: 3 replay tasks + 2 clean runs | I1, I2, #15 + 2 healthy deploys | incident-001/003, dep0169-001, clean-001/002 ✅ (+ organic incident-002) |
 
 ### Track B — genuine bugs already in the code (organic)
 
@@ -60,7 +67,7 @@ real issues, fix via `@talos`, harvest as Talos-bench tasks.
 |---|---|---|
 | B1 ✅ *(done 2026-06-10: issue #25 → PR #26 → v48; harvested as talos-bench-001, cr-001, rn-001, rca/clean-001)* | `PUT /api/todos/:id` silently resets `completed` to `false` when the body omits it (`store.update` does `completed = !!completed`). Toggling a title wipes completion state. | Fix: preserve existing `completed` when absent. Test: update title only → completed unchanged. |
 | B2 ✅ *(done 2026-06-10: seeded incident → RCA issue #30 → PR #31 → fixed; harvested as talos-bench-002 + cr-002 — note the fix omitted the requested test and code-review passed it anyway, an organic `missing_test` miss)* | `GET /api/todos/search?q=a&q=b` returns 500 — repeated query param arrives as an array, `q.toLowerCase()` throws (`handler.js` `handleSearch`). | Fix: coerce/reject array `q` with 400. Test: repeated param → 400 (or first value), never 500. |
-| B3 | `POST /api/todos` accepts unbounded `title` length — no max, so a 10 MB title is stored and echoed on every list call. | Fix: 400 over a documented max (e.g. 500 chars); update `openapi.yaml` `maxLength`. |
+| B3 🔄 *(2026-06-11: filed as issue #66, `@talos` triggered — live pipeline run in flight; harvest talos-bench-005 on merge)* | `POST /api/todos` accepts unbounded `title` length — no max, so a 10 MB title is stored and echoed on every list call. | Fix: 400 over a documented max (e.g. 500 chars); update `openapi.yaml` `maxLength`. |
 
 > B2 is also an **RCA incident seed**: deploy *without* the fix, hit the
 > endpoint, harvest the 500s from logs as `rca/` replay task I1 — then merge
@@ -74,9 +81,9 @@ the review suites.
 
 | ID | Feature | Notes for the issue |
 |---|---|---|
-| F1 | Filter list by status: `GET /api/todos?completed=true\|false` | Spec + handler + test. Small, single-file — ideal first Talos-bench task. |
+| F1 | Filter list by status: `GET /api/todos?completed=true\|false` | Spec + handler + test. Small, single-file — ideal first Talos-bench task. *(The inverted-filter variant was used as seeded defect S1/cr-011; the correct organic merge is still open.)* |
 | F2 | `PATCH /api/todos/:id` partial update | Fixes the PUT wart properly; supersedes the B1 workaround. Spec change exercises contract-test. |
-| F3 | `GET /api/todos/stats` → `{total, completed, open}` | Tiny new endpoint; good fix-a-bug-sized task. |
+| F3 | `GET /api/todos/stats` → `{total, completed, open}` | Tiny new endpoint; good fix-a-bug-sized task. *(The no-test variant was used as seeded defect S5/cr-015; the correct organic merge is still open.)* |
 | F4 | `due_date` field (ISO 8601, optional) on create/update | Validation surface (bad date → 400) feeds future mutation seeds. |
 | F5 | `priority` field (`low\|medium\|high`, default `medium`) | Enum validation; UI dropdown in `public/index.html`. |
 
@@ -86,47 +93,64 @@ Author each as a PR labelled `eval-seed:code-review`; record category in
 `task.json`; close after the code-review agent has run (its comment is the
 trial output to grade against the label).
 
-| ID | PR content | Label |
-|---|---|---|
-| S1 | F1 implementation with the filter inverted (`completed=true` returns open todos) | `real_defect` |
-| S2 | Search "optimisation" that drops `.toLowerCase()` — silently becomes case-sensitive | `real_defect` |
-| S3 | DELETE returns `200` + body instead of `204` (contract break vs `openapi.yaml`) | `real_defect` |
-| S4 | New endpoint with copy-pasted validation block duplicated from `handleTodos` | `maintainability` |
-| S5 | F3 implementation with no test added to `store.test.js` | `missing_test` |
-| S6–S10 | Five style-only PRs: rename locals, reorder imports, comment rewording, README typo fix, log message tweak | `style_only` (agent must stay silent — FPR half of the suite) |
+All ten harvested 2026-06-11. **Seeded defect PRs are opened as drafts** (see
+harness-failure log #6) so the SDLC auto-merge cannot land them; the
+code-review agent still runs and comments on a draft.
+
+| ID | PR content | Label | Harvest |
+|---|---|---|---|
+| S1 ✅ | F1 implementation with the filter inverted (`completed=true` returns open todos) | `real_defect` | PR #61 → cr-011 (agent FAIL ✓) |
+| S2 ✅ | Search "optimisation" that drops `.toLowerCase()` — silently becomes case-sensitive | `real_defect` | PR #62 → cr-012 (agent FAIL ✓) |
+| S3 ✅ | DELETE returns `200` + body instead of `204` (contract break vs `openapi.yaml`) | `real_defect` | PR #63 → cr-013 (agent FAIL ✓) |
+| S4 ✅ | New endpoint with copy-pasted validation block duplicated from `handleTodos` | `maintainability` | PR #64 → cr-014 (agent FAIL ✓) |
+| S5 ✅ | F3 implementation with no test added to `store.test.js` | `missing_test` | PR #65 → cr-015 (agent FAIL ✓) |
+| S6–S10 ✅ | Five style-only PRs: rename locals, reorder imports, comment rewording, README typo fix, log message tweak | `style_only` (agent must stay silent — FPR half of the suite) | PRs #50–54 → cr-006..010 (agent PASS ✓; #50 & #54 auto-merged before close — reverted via #55, see harness-failure log #6) |
 
 ### Track V — seeded security fixtures (seeded, never merged)
 
 PRs labelled `eval-seed:security-review`, one CWE each, mapped to the
-strategy's in-scope categories.
+strategy's in-scope categories. All five harvested 2026-06-11 as **draft**
+PRs (a planted vuln must never auto-merge — harness-failure log #6). Each
+vuln also trips code-review, and the SDLC short-circuits security-review
+when code-review FAILs (harness-failure log #7), so these are graded via the
+hermetic runner (DRY_RUN replay of the stored `diff.patch`) rather than a
+live security-review comment.
 
-| ID | Planted vulnerability | CWE | Severity |
-|---|---|---|---|
-| V1 | Render `todo.title` unescaped into `public/index.html` DOM via `innerHTML` | CWE-79 (XSS) | high |
-| V2 | Log raw `req.body` (user-controlled) into the single-line JSON logs — log injection | CWE-117 | medium |
-| V3 | Hardcoded API token committed in a new `lib/config.js` | CWE-798 | critical |
-| V4 | `Object.assign(existing, req.body)` in update — mass-assignment / prototype-pollution path | CWE-915 | high |
-| V5 | Search switched to `new RegExp(q)` on raw user input — ReDoS | CWE-1333 | medium |
+| ID | Planted vulnerability | CWE | Severity | Harvest |
+|---|---|---|---|---|
+| V1 ✅ | Render `todo.title` unescaped into `public/index.html` DOM via `innerHTML` | CWE-79 (XSS) | high | PR #56 → sec-002 |
+| V2 ✅ | Log raw `req.body` (user-controlled) into the single-line JSON logs — log injection | CWE-117 | medium | PR #57 → sec-003 |
+| V3 ✅ | Hardcoded credentials committed in a new `lib/config.js` | CWE-798 | critical | PR #58 → sec-004 (real Stripe-format token tripped GitHub push protection — re-seeded as a basic-auth credential) |
+| V4 ✅ | `Object.assign(existing, req.body)` in update — mass-assignment / prototype-pollution path | CWE-915 | high | PR #59 → sec-005 |
+| V5 ✅ | Search switched to `new RegExp(q)` on raw user input — ReDoS | CWE-1333 | medium | PR #60 → sec-006 |
+
+Clean half (FPR): sec-007..011 from merged organic PRs #26/#47/#45/#41/#39 —
+the agent must stay silent.
 
 ### Track M — contract-test mutation seeds (seeded, fixture branches)
 
 Branches `eval-seed/mutation-<n>` off main, each a one-line handler bug.
 Stored as `mutation.patch` + expected violation in `evals/datasets/contract-test/`.
 
-| ID | Mutation | Expected catch |
-|---|---|---|
-| M1 | POST success returns `200` instead of `201` | wrong-status violation |
-| M2 | `create()` drops `created_at` from the response | schema violation (required field) |
-| M3 | GET by id returns the todo wrapped as `{todo: {...}}` | schema violation (shape) |
+All three pushed 2026-06-11 (branches `eval-seed/mutation-1..3`); the runner
+copies `todo-api`, applies the patch, serves it locally, and replays
+contract-test against it. Two were adapted from the original spec so the
+*agent* (not a spec gap) is what's tested — see each `task.json` rationale.
+
+| ID | Mutation | Expected catch | Status |
+|---|---|---|---|
+| M1 ✅ | POST success returns `200` instead of `201` | wrong-status violation | mut-001 (killed ✓) |
+| M2 ✅ | `create()` drops `completed` (a *required* field; `created_at` is spec-optional, so the original M2 mutant would survive) | schema violation (required field) | mut-002 (killed ✓) |
+| M3 ✅ | `search` wraps results as `{results: [...]}` (the deterministic set never GETs an existing todo, so the original GET-by-id wrap is only LLM-catchable) | schema violation (shape) | mut-003 (killed ✓) |
 
 ### Track I — RCA incident seeds
 
 | ID | Incident | Harvest |
 |---|---|---|
 | I1 ✅ *(done 2026-06-10: 50x 500s seeded into the post-promote soak window; RCA top-1 hit with file:line evidence → incident-001. Bonus organic harvest: incident-002, RCA's first false positive — DEP0169 noise re-raised as #32 despite triage in #15; suppression fix = issue #33)* | B2 deployed unfixed; traffic with repeated `q` params → 500s in logs | logs.jsonl + SHA + labelled cause ("array query param unhandled in handleSearch") |
-| I2 | Deploy a build where `logEvent` throws on circular metadata (seeded in a branch) — every request 500s | logs + labelled cause |
-| — | Closed issue #15 (DEP0169 deprecation warning) | retro-harvest as the third replay task |
-| — | Two healthy deploys, logs captured | the 2 clean-log runs (FPR half) |
+| I2 ✅ *(2026-06-11: seeded log bundle, no live deploy — faithful to the circular-metadata throw; companion 2nd real-incident replay)* | A build where `logEvent` throws on circular metadata — every request 500s | incident-003: logs + labelled cause (`logging.js:13` JSON.stringify in `logEvent`) |
+| ✅ | Closed issue #15 (DEP0169 deprecation warning) | dep0169-001: DEP0169-only bundle; ground truth = suppressed, no issue (the regression guard for the suppressions.json packaging path broken by #42) |
+| ✅ | Two healthy deploys, logs captured | clean-001 + clean-002 (FPR half) |
 
 ---
 
@@ -169,12 +193,44 @@ miss. The strategy needs to score agents only on runs that actually executed:
    **real-deploy outcomes**, not just unit tests: no test that imports the
    module can see a missing `COPY` line.
 
+Observed 2026-06-11 while harvesting the seeded fixtures (Wave 1 build-out):
+
+6. **Auto-merge landed two seeds on main** — the SDLC `auto-merge` job enables
+   `gh pr merge --auto` on every PR, gated only on `pr-review` passing. Two
+   style-only seed PRs (#50, #54) passed code-review and auto-merged before
+   they could be closed; the three that the agent happened to comment on more
+   slowly were closed in time. Reverted via #55 (which code-review then *failed*
+   with backwards reasoning — harvested for judge calibration). **Fix adopted:
+   open every seeded PR as a draft** — `--auto` cannot merge a draft, but the
+   review agents still run and comment. A planted *vulnerability* auto-merging
+   to main (had V1–V5 gone in non-draft) would have been a real incident, not a
+   cosmetic one.
+7. **Review short-circuit hides one agent's trial** — `pr-review` runs
+   code-review then security-review as ordered steps with no `if: always()`.
+   When code-review exits non-zero, the job stops and security-review never
+   runs. Every V-track vuln also trips code-review, so none produced a live
+   security-review comment. Consequence for eval harvesting: **security
+   fixtures are graded by the hermetic runner** (DRY_RUN replay of the stored
+   `diff.patch`), not by scraping a live PR comment. Also a real harness smell —
+   a PR's security posture is unknown whenever code-review fails first.
+8. **Push protection caught a realistic secret seed** — V3's first attempt used
+   a Stripe-format `sk_live_…` token; GitHub secret scanning blocked the push
+   (correctly). Re-seeded as a basic-auth credential, which still exercises
+   CWE-798 without matching a vendor secret pattern. Note for seed authors:
+   plant credentials that read as hardcoded secrets to a reviewer but don't
+   match push-protection regexes.
+
 Implication for the strategy: distinguish *infra/harness failure* from *agent
 failure* before computing pass rates; add timeouts + bounded-retry +
 human-escalation as first-class harness behaviour (exercised manually on #33
-and #38); and keep at least one **outcome grader that exercises the built
+and #38); keep at least one **outcome grader that exercises the built
 artefact** (the deployed container), since #5 is invisible to every
-source-level grader.
+source-level grader; and treat the **eval runner's infra-vs-agent split**
+(`InfraFailure` → pytest skip, never a fail — see `evals/runner.py`) as the
+code embodiment of that first principle. Findings #6/#7 are arguments for two
+harness guards the strategy should name: seeds must be merge-blocked
+(draft/label), and review stages should run independently (`if: always()`) so
+one agent's verdict never masks another's.
 
 ## Working agreement
 

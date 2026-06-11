@@ -1,0 +1,11 @@
+diff --git a/todo-api/dev-server.js b/todo-api/dev-server.js
+index da6fb7e..131ee03 100644
+--- a/todo-api/dev-server.js
++++ b/todo-api/dev-server.js
+@@ -106,5 +106,5 @@ const server = createServer(async (req, res) => {
+ });
+ 
+ server.listen(port, () => {
+-  logEvent('info', 'server_starting', { port });
++  logEvent('info', 'server_listening', { port });
+ });

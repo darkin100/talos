@@ -1,0 +1,12 @@
+{
+  "id": "rn-005",
+  "suite": "regression",
+  "agent": "release-notes",
+  "track": "wave1/B2 (organic)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/31",
+  "label": {
+    "reference": "reference.md",
+    "rationale": "Hand-edited ideal note. Code-based grader: \u2264300 words + every #PR/sha/tag reference grounded in input.json. Faithfulness (atomic claims) is the model-based grader's job later."
+  }
+}

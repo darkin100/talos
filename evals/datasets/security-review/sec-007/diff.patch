@@ -1,0 +1,35 @@
+diff --git a/todo-api/lib/store.js b/todo-api/lib/store.js
+index 6c996df..d72f62a 100644
+--- a/todo-api/lib/store.js
++++ b/todo-api/lib/store.js
+@@ -36,7 +36,10 @@ export class Store {
+     const existing = this.todos.get(id);
+     if (!existing) return null;
+     existing.title = title;
+-    existing.completed = !!completed;
++    // Only update completed if explicitly provided (not undefined)
++    if (completed !== undefined) {
++      existing.completed = !!completed;
++    }
+     return existing;
+   }
+ 
+diff --git a/todo-api/test/store.test.js b/todo-api/test/store.test.js
+index a4ae822..7078abb 100644
+--- a/todo-api/test/store.test.js
++++ b/todo-api/test/store.test.js
+@@ -49,3 +49,14 @@ test('delete returns true for existing id and false for missing', () => {
+   assert.equal(s.delete(1), true);
+   assert.equal(s.delete(1), false);
+ });
++
++test('update preserves completed when not provided in request', () => {
++  const s = new Store();
++  s.create('original');
++  // Mark as completed
++  s.update(1, 'original', true);
++  // Update title without providing completed field
++  const updated = s.update(1, 'updated', undefined);
++  assert.equal(updated.title, 'updated');
++  assert.equal(updated.completed, true, 'completed should remain true');
++});
