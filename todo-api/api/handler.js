@@ -41,6 +41,24 @@ function handleTodos(req, res) {
   return 405;
 }
 
+function handleCount(req, res) {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method not allowed' });
+    return 405;
+  }
+  // Validate optional filter title (copied from create handler).
+  const title = req.body && req.body.title;
+  if (title !== undefined) {
+    if (typeof title !== 'string' || !title) {
+      logEvent('error', 'title is required', { status: 400 });
+      res.status(400).json({ error: 'title is required' });
+      return 400;
+    }
+  }
+  res.status(200).json({ count: store.list().length });
+  return 200;
+}
+
 function handleSearch(req, res) {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method not allowed' });
