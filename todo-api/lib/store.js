@@ -25,7 +25,6 @@ export class Store {
     const todo = {
       id: this.nextId++,
       title,
-      completed: false,
       created_at: new Date().toISOString(),
     };
     this.todos.set(todo.id, todo);
