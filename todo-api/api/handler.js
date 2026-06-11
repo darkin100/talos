@@ -13,6 +13,8 @@
 import { store } from '../lib/store.js';
 import { logEvent } from '../lib/logging.js';
 
+const MAX_TITLE_LENGTH = 500;
+
 function handleHealthz(req, res) {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method not allowed' });
@@ -32,6 +34,11 @@ function handleTodos(req, res) {
     if (typeof title !== 'string' || !title) {
       logEvent('error', 'title is required', { status: 400 });
       res.status(400).json({ error: 'title is required' });
+      return 400;
+    }
+    if (title.length > MAX_TITLE_LENGTH) {
+      logEvent('error', 'title exceeds maximum length', { status: 400, max_length: MAX_TITLE_LENGTH });
+      res.status(400).json({ error: `title exceeds maximum length of ${MAX_TITLE_LENGTH}` });
       return 400;
     }
     res.status(201).json(store.create(title));
@@ -76,6 +83,11 @@ function handleTodoById(req, res, rawId) {
     if (typeof title !== 'string') {
       logEvent('error', 'invalid body', { status: 400 });
       res.status(400).json({ error: 'invalid body' });
+      return 400;
+    }
+    if (title.length > MAX_TITLE_LENGTH) {
+      logEvent('error', 'title exceeds maximum length', { status: 400, max_length: MAX_TITLE_LENGTH });
+      res.status(400).json({ error: `title exceeds maximum length of ${MAX_TITLE_LENGTH}` });
       return 400;
     }
     const todo = store.update(id, title, completed);

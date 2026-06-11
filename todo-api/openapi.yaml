@@ -50,6 +50,7 @@ paths:
                 title:
                   type: string
                   minLength: 1
+                  maxLength: 500
       responses:
         '201':
           description: Todo created
@@ -136,6 +137,8 @@ paths:
               properties:
                 title:
                   type: string
+                  minLength: 1
+                  maxLength: 500
                 completed:
                   type: boolean
       responses:

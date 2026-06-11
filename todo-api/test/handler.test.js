@@ -42,3 +42,33 @@ test('GET /api/todos/ with empty id returns 400', () => {
   assert.equal(res.statusCode, 400);
   assert.deepEqual(res.body, { error: 'invalid todo id' });
 });
+
+test('POST /api/todos with 500-char title returns 201', () => {
+  const res = mockRes();
+  const title = 'a'.repeat(500);
+  handler(
+    {
+      method: 'POST',
+      query: { slug: 'todos' },
+      body: { title },
+    },
+    res,
+  );
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.title, title);
+});
+
+test('POST /api/todos with 501-char title returns 400', () => {
+  const res = mockRes();
+  const title = 'a'.repeat(501);
+  handler(
+    {
+      method: 'POST',
+      query: { slug: 'todos' },
+      body: { title },
+    },
+    res,
+  );
+  assert.equal(res.statusCode, 400);
+  assert(res.body.error.includes('exceeds maximum length'));
+});
