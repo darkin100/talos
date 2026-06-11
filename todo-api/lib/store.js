@@ -33,14 +33,14 @@ export class Store {
   }
 
   update(id, title, completed) {
-    const existing = this.todos.get(id);
-    if (!existing) return null;
-    existing.title = title;
+    const current = this.todos.get(id);
+    if (!current) return null;
+    current.title = title;
     // Only update completed if explicitly provided (not undefined)
     if (completed !== undefined) {
-      existing.completed = !!completed;
+      current.completed = !!completed;
     }
-    return existing;
+    return current;
   }
 
   delete(id) {
