@@ -99,7 +99,7 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
 
   if (path.startsWith('/api/')) {
-    req.query.slug = path.slice('/api/'.length).split('/').filter(Boolean);
+    req.query.slug = path.slice('/api/'.length).split('/');
     return handler(req, res);
   }
   return serveStatic(req, res, path);

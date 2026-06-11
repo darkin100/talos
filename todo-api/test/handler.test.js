@@ -35,3 +35,10 @@ test('POST /api/healthz returns 405 (method guard)', () => {
   assert.equal(res.statusCode, 405);
   assert.deepEqual(res.body, { error: 'method not allowed' });
 });
+
+test('GET /api/todos/ with empty id returns 400', () => {
+  const res = mockRes();
+  handler({ method: 'GET', query: { slug: 'todos/' } }, res);
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'invalid todo id' });
+});

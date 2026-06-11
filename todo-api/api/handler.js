@@ -110,7 +110,7 @@ export default function handler(req, res) {
   const slug = Array.isArray(slugRaw)
     ? slugRaw
     : slugRaw
-      ? slugRaw.split('/').filter(Boolean)
+      ? slugRaw.split('/')
       : [];
   const path = '/api/' + slug.join('/');
   let status = 500;
