@@ -88,12 +88,41 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.client_payload.pr_number }}
         run: gh pr merge ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --squash --auto
 
-  deploy-and-verify:
+  # --- Deploy & verify pipeline -------------------------------------------
+  # Split into stages so the run shows up as a job graph in the GitHub UI:
+  #
+  #   test → deploy → smoke → {release-notes, contract-test} → promote → rca
+  #
+  # Each job runs on a fresh runner, so agent images are built in the job
+  # that uses them and data (preview URL, merged PR number) flows through
+  # job outputs. Only `test` carries the trigger condition; everything
+  # downstream inherits it through `needs`.
+
+  test:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Todo API tests
+        working-directory: todo-api
+        run: npm test
+
+  deploy:
+    needs: test
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+      pr_number: ${{ steps.pr.outputs.number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,16 +134,6 @@ jobs:
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
-
-      - name: Build agent images
-        run: |
-          docker build -t talos/release-notes:v1 ./agents/release-notes
-          docker build -t talos/contract-test:v1 ./agents/contract-test
-          docker build -t talos/rca:v1 ./agents/rca
-
-      - name: Run Todo API tests
-        working-directory: todo-api
-        run: npm test
 
       - name: Pull Vercel project config
         working-directory: todo-api
@@ -143,9 +162,21 @@ jobs:
           gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
             -f body="talos-preview: ${{ steps.deploy.outputs.url }}" || true
 
+      - name: Resolve merged PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=$(gh pr list --repo ${{ github.repository }} --state merged --search "${{ github.sha }}" --json number --jq '.[0].number // empty')
+          echo "number=${PR}" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
       - name: Smoke deployment
         run: |
-          URL="${{ steps.deploy.outputs.url }}"
+          URL="${{ needs.deploy.outputs.url }}"
           healthy=false
           for i in $(seq 1 30); do
             if curl -fsS "$URL/api/healthz"; then
@@ -162,16 +193,20 @@ jobs:
           curl -fsS -X POST "$URL/api/todos" -H 'content-type: application/json' -d '{"title":"demo"}'
           curl -fsS "$URL/api/todos"
 
-      - name: Resolve merged PR number
-        id: pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR=$(gh pr list --repo ${{ github.repository }} --state merged --search "${{ github.sha }}" --json number --jq '.[0].number // empty')
-          echo "number=${PR}" >> "$GITHUB_OUTPUT"
+  release-notes:
+    needs: [deploy, smoke]
+    # Pushes without a merged PR (e.g. direct commits) have nothing to write
+    # notes for; the job is skipped rather than failed so promote can proceed.
+    if: needs.deploy.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build agent image
+        run: docker build -t talos/release-notes:v1 ./agents/release-notes
 
       - name: Generate release notes
-        if: steps.pr.outputs.number != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -183,12 +218,22 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -e GITHUB_TOKEN \
             -e GITHUB_REPOSITORY=${{ github.repository }} \
-            -e PR_NUMBER=${{ steps.pr.outputs.number }} \
+            -e PR_NUMBER=${{ needs.deploy.outputs.pr_number }} \
             -e OPENROUTER_API_KEY \
             -e ARIZE_SPACE_ID \
             -e ARIZE_API_KEY \
             -e RELEASE_TAG \
             talos/release-notes:v1
+
+  contract-test:
+    needs: [deploy, smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build agent image
+        run: docker build -t talos/contract-test:v1 ./agents/contract-test
 
       - name: Run contract-test agent
         env:
@@ -204,16 +249,59 @@ jobs:
             -e OPENROUTER_API_KEY \
             -e ARIZE_SPACE_ID \
             -e ARIZE_API_KEY \
-            -e DEPLOYMENT_URL=${{ steps.deploy.outputs.url }} \
+            -e DEPLOYMENT_URL=${{ needs.deploy.outputs.url }} \
             -e COMMIT_SHA=${{ github.sha }} \
-            -e PR_NUMBER=${{ steps.pr.outputs.number }} \
+            -e PR_NUMBER=${{ needs.deploy.outputs.pr_number }} \
             talos/contract-test:v1
 
+  promote:
+    needs: [deploy, release-notes, contract-test]
+    # Gating: release-notes may legitimately be SKIPPED (direct push with no
+    # merged PR), and a job's implicit `if: success()` treats a skipped need
+    # as a blocker — without an explicit condition, promote would silently
+    # never run on direct pushes. `!failure() && !cancelled()` runs promote
+    # unless something in the dependency chain actually FAILED or the run was
+    # cancelled; skipped jobs pass through. Net effect, identical to the old
+    # monolithic job: a failed release-notes or contract-test blocks
+    # promotion, a skipped release-notes does not. Equivalent explicit form:
+    #   needs.contract-test.result == 'success' &&
+    #   (needs.release-notes.result == 'success' || needs.release-notes.result == 'skipped')
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    env:
+      # Project linkage without a checkout: the monolithic job ran promote
+      # from todo-api/ and relied on the .vercel directory that `vercel pull`
+      # had created earlier in the same job. This job has neither, by design.
+      # Setting VERCEL_ORG_ID + VERCEL_PROJECT_ID is the documented CI
+      # mechanism for the Vercel CLI to resolve the project without a linked
+      # directory, and `vercel promote` is passed the full deployment URL
+      # (plus --scope), which identifies the deployment unambiguously.
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
       - name: Promote to production
-        working-directory: todo-api
         run: |
-          vercel promote ${{ steps.deploy.outputs.url }} --yes --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }}
-          echo "Promoted ${{ steps.deploy.outputs.url }} to production"
+          vercel promote ${{ needs.deploy.outputs.url }} --yes --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }}
+          echo "Promoted ${{ needs.deploy.outputs.url }} to production"
+
+  rca:
+    needs: [deploy, promote]
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Build agent image
+        run: docker build -t talos/rca:v1 ./agents/rca
 
       # PRD: RCA "monitors logs for 60 seconds (configurable) after
       # deployment". Capturing seconds after deploy meant RCA could only
@@ -226,7 +314,7 @@ jobs:
       - name: Capture Vercel logs
         run: |
           mkdir -p .logs
-          vercel logs ${{ steps.deploy.outputs.url }} --json --token=${{ secrets.VERCEL_TOKEN }} > .logs/app.log 2>&1 || true
+          vercel logs ${{ needs.deploy.outputs.url }} --json --token=${{ secrets.VERCEL_TOKEN }} > .logs/app.log 2>&1 || true
 
       # Persist the log bundle so eval datasets (RCA replay tasks in
       # evals/datasets/rca/) can be harvested from any run after the fact.
@@ -256,6 +344,6 @@ jobs:
             -e ARIZE_SPACE_ID \
             -e ARIZE_API_KEY \
             -e COMMIT_SHA=${{ github.sha }} \
-            -e PR_NUMBER=${{ steps.pr.outputs.number }} \
-            -e DEPLOYMENT_URL=${{ steps.deploy.outputs.url }} \
+            -e PR_NUMBER=${{ needs.deploy.outputs.pr_number }} \
+            -e DEPLOYMENT_URL=${{ needs.deploy.outputs.url }} \
             talos/rca:v1
