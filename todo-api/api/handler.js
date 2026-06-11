@@ -41,6 +41,17 @@ function handleTodos(req, res) {
   return 405;
 }
 
+function handleStats(req, res) {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method not allowed' });
+    return 405;
+  }
+  const all = store.list();
+  const completed = all.filter((t) => t.completed).length;
+  res.status(200).json({ total: all.length, completed, open: all.length - completed });
+  return 200;
+}
+
 function handleSearch(req, res) {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method not allowed' });
@@ -123,6 +134,9 @@ export default function handler(req, res) {
     if (slug.length === 1 && slug[0] === 'todos') {
       status = handleTodos(req, res);
       return;
+    }
+    if (slug.length === 2 && slug[0] === 'todos' && slug[1] === 'stats') {
+      status = handleStats(req, res);
     }
     if (slug.length === 2 && slug[0] === 'todos' && slug[1] === 'search') {
       status = handleSearch(req, res);
