@@ -256,13 +256,26 @@ jobs:
 
   promote:
     needs: [deploy, release-notes, contract-test]
-    # release-notes may legitimately be skipped (no merged PR), which the
-    # implicit success() check would treat as a blocker. Promote whenever
-    # nothing upstream actually failed or was cancelled — a failed
-    # release-notes or contract-test still blocks promotion, as before.
+    # Gating: release-notes may legitimately be SKIPPED (direct push with no
+    # merged PR), and a job's implicit `if: success()` treats a skipped need
+    # as a blocker — without an explicit condition, promote would silently
+    # never run on direct pushes. `!failure() && !cancelled()` runs promote
+    # unless something in the dependency chain actually FAILED or the run was
+    # cancelled; skipped jobs pass through. Net effect, identical to the old
+    # monolithic job: a failed release-notes or contract-test blocks
+    # promotion, a skipped release-notes does not. Equivalent explicit form:
+    #   needs.contract-test.result == 'success' &&
+    #   (needs.release-notes.result == 'success' || needs.release-notes.result == 'skipped')
     if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     env:
+      # Project linkage without a checkout: the monolithic job ran promote
+      # from todo-api/ and relied on the .vercel directory that `vercel pull`
+      # had created earlier in the same job. This job has neither, by design.
+      # Setting VERCEL_ORG_ID + VERCEL_PROJECT_ID is the documented CI
+      # mechanism for the Vercel CLI to resolve the project without a linked
+      # directory, and `vercel promote` is passed the full deployment URL
+      # (plus --scope), which identifies the deployment unambiguously.
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
