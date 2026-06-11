@@ -28,6 +28,7 @@ function handleTodos(req, res) {
     return 200;
   }
   if (req.method === 'POST') {
+    logEvent('info', `create request body: ${JSON.stringify(req.body)}`, req.body);
     const title = req.body && req.body.title;
     if (typeof title !== 'string' || !title) {
       logEvent('error', 'title is required', { status: 400 });
