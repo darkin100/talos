@@ -26,7 +26,7 @@ pull request. Triggered by an `@talos` mention in a comment on an issue.
 - Opens a PR titled `talos: <issue title>` from a fresh `talos/issue-<N>-<run>` branch, with `Closes #<N>` in the body.
 - Posts a single follow-up comment on the issue with the PR link or the failure reason.
 - Reacts to the triggering comment: `eyes` on start, `rocket` on success, `confused` on no-op or Pi failure.
-- Emits a `talos.code.run` span to Arize AX with attributes: repo, issue number, model, pi exit code, event count, verdict, pr url.
+- Emits an OpenInference-compliant trace to Arize AX (see `docs/openinference-spec/`): a root `talos.code.run` AGENT span (issue prompt as input, Pi's summary as output, plus repo/issue/model/verdict attributes), a CHAIN span per Pi turn, an LLM span per assistant message (input/output messages, tool calls, token counts reconstructed from Pi's JSON event stream), and a TOOL span per tool execution.
 
 ## Exit codes
 

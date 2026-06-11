@@ -72,6 +72,19 @@ import urllib.request  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from openai import OpenAI  # noqa: E402
+from opentelemetry import trace  # noqa: E402
+
+try:
+    # Context attributes (session id, metadata) propagate onto every span the
+    # OpenAI instrumentor emits, per the OpenInference context-attributes spec.
+    from openinference.instrumentation import using_attributes  # noqa: E402
+except ImportError:  # tracing deps absent — degrade to a no-op
+    from contextlib import contextmanager  # noqa: E402
+
+    @contextmanager
+    def using_attributes(**_kwargs):
+        yield
+
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -166,6 +179,9 @@ def main() -> int:
         },
     )
     notes = call_llm(client, model, prompt)
+    root = trace.get_current_span()
+    root.set_attribute("output.value", notes)
+    root.set_attribute("output.mime_type", "text/plain")
 
     workspace = Path("/workspace")
     if workspace.exists():
@@ -183,8 +199,41 @@ def main() -> int:
     return 0
 
 
+def _traced_main() -> int:
+    """Wrap main() in an OpenInference root CHAIN span.
+
+    The OpenAI instrumentor emits compliant LLM child spans; this supplies the
+    root span (with the required openinference.span.kind) plus session and
+    metadata context attributes that propagate to those child spans.
+    """
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pr_number = os.environ.get("PR_NUMBER", "")
+    model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
+    release_tag = os.environ.get("RELEASE_TAG", "")
+    session_id = os.environ.get("GITHUB_RUN_ID", "")
+    metadata = {"repo": repo, "pr_number": pr_number, "model": model, "release_tag": release_tag}
+    ctx_attrs: dict = {"metadata": metadata}
+    if session_id:
+        ctx_attrs["session_id"] = session_id
+
+    tracer = trace.get_tracer("talos.release-notes")
+    with using_attributes(**ctx_attrs):
+        with tracer.start_as_current_span("talos.release-notes.run") as root:
+            root.set_attribute("openinference.span.kind", "CHAIN")
+            root.set_attribute("agent.name", "talos-release-notes")
+            if session_id:
+                root.set_attribute("session.id", session_id)
+            root.set_attribute("metadata", json.dumps(metadata))
+            root.set_attribute(
+                "input.value",
+                json.dumps({"repo": repo, "pr_number": pr_number, "release_tag": release_tag}),
+            )
+            root.set_attribute("input.mime_type", "application/json")
+            return main()
+
+
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(_traced_main())
     finally:
         _flush_tracing()
