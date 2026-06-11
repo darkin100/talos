@@ -68,6 +68,19 @@ import urllib.error  # noqa: E402
 import urllib.request  # noqa: E402
 
 from openai import OpenAI  # noqa: E402
+from opentelemetry import trace  # noqa: E402
+
+try:
+    # Context attributes (session id, metadata) propagate onto every span the
+    # OpenAI instrumentor emits, per the OpenInference context-attributes spec.
+    from openinference.instrumentation import using_attributes  # noqa: E402
+except ImportError:  # tracing deps absent — degrade to a no-op
+    from contextlib import contextmanager  # noqa: E402
+
+    @contextmanager
+    def using_attributes(**_kwargs):
+        yield
+
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -209,10 +222,13 @@ def main() -> int:
     openrouter_key = env("OPENROUTER_API_KEY")
     model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
 
+    root = trace.get_current_span()
     print(f"[security-review] scanning {repo}#{pr_number} with {model}", flush=True)
     diff = fetch_pr_diff(token, repo, pr_number)
     if not diff.strip():
         print("[security-review] empty diff, skipping", flush=True)
+        root.set_attribute("output.value", json.dumps({"verdict": "skip", "reason": "empty diff"}))
+        root.set_attribute("output.mime_type", "application/json")
         return 0
 
     client = OpenAI(
@@ -239,6 +255,11 @@ def main() -> int:
     # regardless of what the LLM returned.
     has_blocking = any(f.get("severity", "").lower() in FAIL_SEVERITIES for f in kept)
     verdict = "fail" if has_blocking else "pass"
+    root.set_attribute(
+        "output.value",
+        json.dumps({"verdict": verdict, "findings_kept": len(kept), "findings_suppressed": len(suppressed)}),
+    )
+    root.set_attribute("output.mime_type", "application/json")
 
     # V1 pass criteria: clean security review = no comment posted at all.
     if verdict == "pass" and not kept and not suppressed:
@@ -280,8 +301,37 @@ def main() -> int:
     return 1
 
 
+def _traced_main() -> int:
+    """Wrap main() in an OpenInference root CHAIN span.
+
+    The OpenAI instrumentor emits compliant LLM child spans; this supplies the
+    root span (with the required openinference.span.kind) plus session and
+    metadata context attributes that propagate to those child spans.
+    """
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    pr_number = os.environ.get("PR_NUMBER", "")
+    model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
+    session_id = os.environ.get("GITHUB_RUN_ID", "")
+    metadata = {"repo": repo, "pr_number": pr_number, "model": model}
+    ctx_attrs: dict = {"metadata": metadata}
+    if session_id:
+        ctx_attrs["session_id"] = session_id
+
+    tracer = trace.get_tracer("talos.security-review")
+    with using_attributes(**ctx_attrs):
+        with tracer.start_as_current_span("talos.security-review.run") as root:
+            root.set_attribute("openinference.span.kind", "CHAIN")
+            root.set_attribute("agent.name", "talos-security-review")
+            if session_id:
+                root.set_attribute("session.id", session_id)
+            root.set_attribute("metadata", json.dumps(metadata))
+            root.set_attribute("input.value", json.dumps({"repo": repo, "pr_number": pr_number}))
+            root.set_attribute("input.mime_type", "application/json")
+            return main()
+
+
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(_traced_main())
     finally:
         _flush_tracing()

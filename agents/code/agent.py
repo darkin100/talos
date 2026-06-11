@@ -246,6 +246,175 @@ def build_prompt(issue: dict, comments: list[dict]) -> str:
     return "\n".join(parts)
 
 
+# --- OpenInference span helpers -------------------------------------------
+#
+# Pi runs as a subprocess, so the OpenAI auto-instrumentor never sees its LLM
+# calls. We reconstruct OpenInference-compliant LLM/TOOL spans from Pi's JSON
+# event stream instead (conventions: docs/openinference-spec/).
+
+WELL_KNOWN_LLM_SYSTEMS = {
+    "anthropic", "openai", "vertexai", "cohere", "mistralai",
+    "xai", "deepseek", "amazon", "meta", "ai21",
+}
+
+
+def llm_system_for(model: str) -> str:
+    """Map an OpenRouter model id (e.g. anthropic/claude-haiku-4.5) to llm.system."""
+    prefix = model.split("/", 1)[0].lower()
+    return prefix if prefix in WELL_KNOWN_LLM_SYSTEMS else model
+
+
+def _message_text(msg: dict) -> str:
+    content = msg.get("content")
+    if isinstance(content, str):
+        return content
+    parts: list[str] = []
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text") or ""))
+    return "".join(parts)
+
+
+def _content_blocks(msg: dict) -> list[dict]:
+    content = msg.get("content")
+    return [b for b in content if isinstance(b, dict)] if isinstance(content, list) else []
+
+
+def _tool_calls(msg: dict) -> list[dict]:
+    calls: list[dict] = []
+    for block in _content_blocks(msg):
+        if block.get("type") in {"toolCall", "tool_call", "tool_use"}:
+            args = block.get("arguments") if "arguments" in block else block.get("input")
+            calls.append({
+                "id": str(block.get("id") or block.get("toolCallId") or ""),
+                "name": str(block.get("name") or block.get("toolName") or ""),
+                "arguments": args if isinstance(args, str) else json.dumps(args or {}),
+            })
+    return calls
+
+
+def _flatten_message(msg: dict) -> dict:
+    """Flatten a Pi message into OpenInference `message.*` attributes."""
+    role = str(msg.get("role") or "")
+    if role == "toolResult":
+        role = "tool"
+    out: dict = {"message.role": role}
+    text = _message_text(msg)
+    if text:
+        out["message.content"] = text
+    if role == "tool":
+        if msg.get("toolName"):
+            out["message.name"] = str(msg["toolName"])
+        if msg.get("toolCallId"):
+            out["message.tool_call_id"] = str(msg["toolCallId"])
+    for i, call in enumerate(_tool_calls(msg)):
+        for suffix, value in (
+            ("id", call["id"]),
+            ("function.name", call["name"]),
+            ("function.arguments", call["arguments"]),
+        ):
+            if value:
+                out[f"message.tool_calls.{i}.tool_call.{suffix}"] = value
+    # Reasoning must be replayable in order, so emit ordered message.contents
+    # items when the model produced any thinking content.
+    blocks = _content_blocks(msg)
+    if any(b.get("type") in {"thinking", "reasoning"} for b in blocks):
+        ci = 0
+        for b in blocks:
+            btype = b.get("type")
+            if btype in {"thinking", "reasoning"}:
+                out[f"message.contents.{ci}.message_content.type"] = "reasoning"
+                out[f"message.contents.{ci}.message_content.text"] = str(
+                    b.get("thinking") or b.get("text") or ""
+                )
+                if b.get("signature"):
+                    out[f"message.contents.{ci}.message_content.signature"] = str(b["signature"])
+                ci += 1
+            elif btype == "text":
+                out[f"message.contents.{ci}.message_content.type"] = "text"
+                out[f"message.contents.{ci}.message_content.text"] = str(b.get("text") or "")
+                ci += 1
+    return out
+
+
+def _token_count_attrs(usage: dict) -> dict:
+    """Map Pi/OpenAI-style usage objects onto llm.token_count.* / llm.cost.*."""
+    def grab(src: dict, *keys: str) -> int | float | None:
+        for k in keys:
+            v = src.get(k)
+            if isinstance(v, (int, float)):
+                return v
+        return None
+
+    out: dict = {}
+    prompt = grab(usage, "input", "prompt_tokens", "inputTokens")
+    completion = grab(usage, "output", "completion_tokens", "outputTokens")
+    total = grab(usage, "total", "total_tokens", "totalTokens")
+    cache_read = grab(usage, "cacheRead", "cache_read_input_tokens")
+    cache_write = grab(usage, "cacheWrite", "cache_creation_input_tokens")
+    if prompt is not None:
+        out["llm.token_count.prompt"] = int(prompt)
+    if completion is not None:
+        out["llm.token_count.completion"] = int(completion)
+    if cache_read is not None:
+        out["llm.token_count.prompt_details.cache_read"] = int(cache_read)
+    if cache_write is not None:
+        out["llm.token_count.prompt_details.cache_write"] = int(cache_write)
+    if total is None and (prompt is not None or completion is not None):
+        total = (prompt or 0) + (completion or 0)
+    if total is not None:
+        out["llm.token_count.total"] = int(total)
+    cost = usage.get("cost")
+    if isinstance(cost, dict):
+        for attr, key in (
+            ("llm.cost.prompt", "input"),
+            ("llm.cost.completion", "output"),
+            ("llm.cost.total", "total"),
+        ):
+            v = grab(cost, key)
+            if v is not None:
+                out[attr] = float(v)
+    return out
+
+
+def _record_llm_span(span, model: str, conversation: list[dict], msg: dict) -> None:
+    """Populate an LLM span per the OpenInference LLM-span conventions."""
+    span.set_attribute("llm.system", llm_system_for(model))
+    span.set_attribute("llm.provider", "openrouter")
+    span.set_attribute("llm.model_name", str(msg.get("model") or model))
+    span.set_attribute("llm.invocation_parameters", json.dumps({"model": model}))
+    span.set_attribute(
+        "input.value",
+        json.dumps({
+            "model": model,
+            "messages": [
+                {"role": m.get("message.role"), "content": m.get("message.content", "")}
+                for m in conversation
+            ],
+        }),
+    )
+    span.set_attribute("input.mime_type", "application/json")
+    for i, m in enumerate(conversation):
+        for key, value in m.items():
+            span.set_attribute(f"llm.input_messages.{i}.{key}", value)
+    for key, value in _flatten_message(msg).items():
+        span.set_attribute(f"llm.output_messages.0.{key}", value)
+    text = _message_text(msg)
+    if text:
+        span.set_attribute("output.value", text)
+        span.set_attribute("output.mime_type", "text/plain")
+    stop = msg.get("stopReason") or msg.get("stop_reason")
+    if stop:
+        span.set_attribute("llm.finish_reason", str(stop))
+    usage = msg.get("usage")
+    if isinstance(usage, dict):
+        for key, value in _token_count_attrs(usage).items():
+            span.set_attribute(key, value)
+
+
 def run_pi(
     workspace: str,
     prompt: str,
@@ -256,8 +425,10 @@ def run_pi(
     """Invoke `pi --mode json` and stream JSON events.
 
     Returns (exit_code, final_assistant_text, events). Each event is the
-    parsed JSON line emitted by Pi. We open a span per turn so the run is
-    visible in Arize alongside the existing agents.
+    parsed JSON line emitted by Pi. The event stream is mirrored into
+    OpenInference spans: a CHAIN span per turn, an LLM span per assistant
+    message (input/output messages and token counts reconstructed from the
+    stream), and a TOOL span per tool execution.
     """
     cmd = [
         "pi",
@@ -287,8 +458,30 @@ def run_pi(
 
     events: list[dict] = []
     final_text_chunks: list[str] = []
-    current_turn_span = None
-    current_turn_ctx = None
+    # Conversation as flattened OpenInference messages; each LLM span snapshots
+    # this as its llm.input_messages. Pi prepends its own base system prompt,
+    # which we can't observe, so the system message holds our appended prompt.
+    conversation: list[dict] = [
+        {"message.role": "system", "message.content": PI_APPEND_SYSTEM_PROMPT},
+        {"message.role": "user", "message.content": prompt},
+    ]
+    turn_count = 0
+    llm_count = 0
+    turn_handle = None
+    llm_handle = None
+    tool_handle = None
+
+    def start_span(name: str, kind: str):
+        if tracer is None:
+            return None
+        cm = tracer.start_as_current_span(name)
+        span = cm.__enter__()
+        span.set_attribute("openinference.span.kind", kind)
+        return cm, span
+
+    def end_span(handle) -> None:
+        if handle is not None:
+            handle[0].__exit__(None, None, None)
 
     assert proc.stdout is not None
     for raw in proc.stdout:
@@ -302,34 +495,106 @@ def run_pi(
             continue
         events.append(evt)
         etype = evt.get("type", "")
+        msg = evt.get("message") if isinstance(evt.get("message"), dict) else {}
 
-        if etype == "turn_start" and tracer is not None:
-            current_turn_ctx = tracer.start_as_current_span(f"pi.turn.{len(events)}")
-            current_turn_span = current_turn_ctx.__enter__()
-        elif etype == "turn_end" and current_turn_ctx is not None:
-            current_turn_ctx.__exit__(None, None, None)
-            current_turn_ctx = None
-            current_turn_span = None
-        elif etype == "message_update":
-            inner = evt.get("assistantMessageEvent", {})
-            if inner.get("type") == "text_delta":
-                final_text_chunks.append(inner.get("delta", ""))
-        elif etype == "message_end":
-            # `message_end` is emitted for each assistant message; the final
-            # one is the agent's closing summary. We always concatenate text
-            # deltas above, but if pi emits a `text` field on the end event
-            # use that as a more reliable source.
-            text = evt.get("text")
-            if text and not final_text_chunks:
-                final_text_chunks.append(text)
-        if current_turn_span is not None:
+        try:
+            if etype == "turn_start":
+                end_span(turn_handle)
+                turn_count += 1
+                turn_handle = start_span(f"pi.turn.{turn_count}", "CHAIN")
+            elif etype == "message_start":
+                if msg.get("role", "assistant") == "assistant" and llm_handle is None:
+                    llm_count += 1
+                    llm_handle = start_span(f"pi.llm.{llm_count}", "LLM")
+            elif etype == "message_update":
+                inner = evt.get("assistantMessageEvent", {})
+                if inner.get("type") == "text_delta":
+                    final_text_chunks.append(inner.get("delta", ""))
+            elif etype == "message_end":
+                role = msg.get("role", "")
+                if role == "assistant":
+                    if llm_handle is None:
+                        llm_count += 1
+                        llm_handle = start_span(f"pi.llm.{llm_count}", "LLM")
+                    if llm_handle is not None:
+                        _record_llm_span(llm_handle[1], model, conversation, msg)
+                    end_span(llm_handle)
+                    llm_handle = None
+                    conversation.append(_flatten_message(msg))
+                elif role in {"toolResult", "tool"}:
+                    entry = _flatten_message(msg)
+                    tcid = entry.get("message.tool_call_id")
+                    if not tcid or all(
+                        m.get("message.tool_call_id") != tcid for m in conversation
+                    ):
+                        conversation.append(entry)
+                # `message_end` is emitted for each assistant message; the
+                # final one is the agent's closing summary. We always
+                # concatenate text deltas above, but if pi emits a `text`
+                # field on the end event use that as a more reliable source.
+                text = evt.get("text")
+                if text and not final_text_chunks:
+                    final_text_chunks.append(text)
+            elif etype in {"tool_execution_start", "toolExecutionStart"}:
+                end_span(tool_handle)
+                tool_name = str(evt.get("toolName") or evt.get("tool_name") or "tool")
+                tool_handle = start_span(f"pi.tool.{tool_name}", "TOOL")
+                if tool_handle is not None:
+                    tool_span = tool_handle[1]
+                    tool_span.set_attribute("tool.name", tool_name)
+                    call_id = evt.get("toolCallId") or evt.get("tool_call_id")
+                    if call_id:
+                        tool_span.set_attribute("tool.id", str(call_id))
+                    args = evt.get("args") if "args" in evt else evt.get("arguments")
+                    if args is not None:
+                        tool_span.set_attribute(
+                            "input.value", args if isinstance(args, str) else json.dumps(args)
+                        )
+                        tool_span.set_attribute("input.mime_type", "application/json")
+            elif etype in {"tool_execution_end", "toolExecutionEnd"}:
+                result = evt.get("result")
+                result_text = _message_text(result) if isinstance(result, dict) else str(result or "")
+                if tool_handle is not None:
+                    tool_span = tool_handle[1]
+                    if result_text:
+                        tool_span.set_attribute("output.value", result_text[:8000])
+                        tool_span.set_attribute("output.mime_type", "text/plain")
+                end_span(tool_handle)
+                tool_handle = None
+                # Record the result in the conversation unless Pi also emits a
+                # toolResult message_end for it (deduped on tool_call_id).
+                call_id = str(evt.get("toolCallId") or evt.get("tool_call_id") or "")
+                if call_id and all(
+                    m.get("message.tool_call_id") != call_id for m in conversation
+                ):
+                    entry = {
+                        "message.role": "tool",
+                        "message.tool_call_id": call_id,
+                        "message.content": result_text[:8000],
+                    }
+                    tool_name = evt.get("toolName") or evt.get("tool_name")
+                    if tool_name:
+                        entry["message.name"] = str(tool_name)
+                    conversation.append(entry)
+            elif etype == "turn_end":
+                end_span(llm_handle)
+                llm_handle = None
+                end_span(tool_handle)
+                tool_handle = None
+                end_span(turn_handle)
+                turn_handle = None
+        except Exception as exc:  # span bookkeeping must never kill the run
+            print(f"[code] span bookkeeping error on {etype}: {exc}", flush=True)
+
+        if turn_handle is not None:
             try:
-                current_turn_span.add_event(etype, attributes={"raw": raw[:500]})
+                turn_handle[1].add_event(etype, attributes={"raw": raw[:500]})
             except Exception:
                 pass
 
-    if current_turn_ctx is not None:
-        current_turn_ctx.__exit__(None, None, None)
+    end_span(llm_handle)
+    end_span(tool_handle)
+    end_span(turn_handle)
 
     stderr = proc.stderr.read() if proc.stderr else ""
     proc.wait()
@@ -429,6 +694,13 @@ def main() -> int:
     span_ctx = tracer.start_as_current_span("talos.code.run") if tracer else None
     span = span_ctx.__enter__() if span_ctx else None
     if span is not None:
+        span.set_attribute("openinference.span.kind", "AGENT")
+        span.set_attribute("agent.name", "talos-code")
+        span.set_attribute("session.id", run_id)
+        span.set_attribute(
+            "metadata",
+            json.dumps({"repo": repo, "issue_number": issue_number, "model": model}),
+        )
         span.set_attribute("talos.repo", repo)
         span.set_attribute("talos.issue_number", issue_number)
         span.set_attribute("talos.model", model)
@@ -449,6 +721,9 @@ def main() -> int:
 
         comments = fetch_issue_comments(token, repo, issue_number)
         prompt = build_prompt(issue, comments)
+        if span is not None:
+            span.set_attribute("input.value", prompt)
+            span.set_attribute("input.mime_type", "text/plain")
 
         configure_git(workspace)
         run(["git", "checkout", "main"], cwd=workspace, check=False)
@@ -458,6 +733,9 @@ def main() -> int:
         if span is not None:
             span.set_attribute("talos.pi.exit_code", exit_code)
             span.set_attribute("talos.pi.event_count", len(events))
+            if summary:
+                span.set_attribute("output.value", summary)
+                span.set_attribute("output.mime_type", "text/plain")
 
         if exit_code != 0:
             msg = f"Pi exited with code {exit_code}. See workflow logs for details."

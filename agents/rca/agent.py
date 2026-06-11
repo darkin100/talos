@@ -76,6 +76,19 @@ import urllib.request  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from openai import OpenAI  # noqa: E402
+from opentelemetry import trace  # noqa: E402
+
+try:
+    # Context attributes (session id, metadata) propagate onto every span the
+    # OpenAI instrumentor emits, per the OpenInference context-attributes spec.
+    from openinference.instrumentation import using_attributes  # noqa: E402
+except ImportError:  # tracing deps absent — degrade to a no-op
+    from contextlib import contextmanager  # noqa: E402
+
+    @contextmanager
+    def using_attributes(**_kwargs):
+        yield
+
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -295,8 +308,11 @@ def main() -> int:
     if phoenix_url:
         errors.extend(query_phoenix_errors(phoenix_url))
 
+    root = trace.get_current_span()
     if not errors:
         print("[rca] no errors detected — route to live cleared", flush=True)
+        root.set_attribute("output.value", json.dumps({"verdict": "clean", "errors": 0}))
+        root.set_attribute("output.mime_type", "application/json")
         return 0
 
     print(f"[rca] {len(errors)} error events detected; performing RCA", flush=True)
@@ -319,12 +335,51 @@ def main() -> int:
         body += f"\nTriggering PR: #{pr_number}"
 
     issue = create_issue(token, repo, title, body)
+    root.set_attribute(
+        "output.value",
+        json.dumps({"verdict": "errors", "errors": len(errors), "issue_number": issue.get("number"), "title": title}),
+    )
+    root.set_attribute("output.mime_type", "application/json")
     print(f"[rca] raised issue #{issue.get('number')} — route to live paused", flush=True)
     return 1
 
 
+def _traced_main() -> int:
+    """Wrap main() in an OpenInference root CHAIN span.
+
+    The OpenAI instrumentor emits compliant LLM child spans; this supplies the
+    root span (with the required openinference.span.kind) plus session and
+    metadata context attributes that propagate to those child spans.
+    """
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
+    log_file = os.environ.get("LOG_FILE", "/logs/app.log")
+    session_id = os.environ.get("GITHUB_RUN_ID", "")
+    metadata = {
+        "repo": repo,
+        "model": model,
+        "commit_sha": os.environ.get("COMMIT_SHA", ""),
+        "pr_number": os.environ.get("PR_NUMBER", ""),
+    }
+    ctx_attrs: dict = {"metadata": metadata}
+    if session_id:
+        ctx_attrs["session_id"] = session_id
+
+    tracer = trace.get_tracer("talos.rca")
+    with using_attributes(**ctx_attrs):
+        with tracer.start_as_current_span("talos.rca.run") as root:
+            root.set_attribute("openinference.span.kind", "CHAIN")
+            root.set_attribute("agent.name", "talos-rca")
+            if session_id:
+                root.set_attribute("session.id", session_id)
+            root.set_attribute("metadata", json.dumps(metadata))
+            root.set_attribute("input.value", json.dumps({"repo": repo, "log_file": log_file}))
+            root.set_attribute("input.mime_type", "application/json")
+            return main()
+
+
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(_traced_main())
     finally:
         _flush_tracing()

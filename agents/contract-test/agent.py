@@ -83,6 +83,19 @@ from typing import Any  # noqa: E402
 import yaml  # noqa: E402
 from jsonschema import Draft7Validator  # noqa: E402
 from openai import OpenAI  # noqa: E402
+from opentelemetry import trace  # noqa: E402
+
+try:
+    # Context attributes (session id, metadata) propagate onto every span the
+    # OpenAI instrumentor emits, per the OpenInference context-attributes spec.
+    from openinference.instrumentation import using_attributes  # noqa: E402
+except ImportError:  # tracing deps absent — degrade to a no-op
+    from contextlib import contextmanager  # noqa: E402
+
+    @contextmanager
+    def using_attributes(**_kwargs):
+        yield
+
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -330,43 +343,70 @@ def generate_llm_tests(client: OpenAI, model: str, spec: dict) -> list[TestCase]
 def execute_tests(base_url: str, spec: dict, tests: list[TestCase]) -> list[Violation]:
     violations: list[Violation] = []
     base = base_url.rstrip("/")
+    # Each HTTP probe is an OpenInference TOOL span under the run's root span.
+    tracer = trace.get_tracer("talos.contract-test")
     for t in tests:
-        url = base + t.path
-        body_bytes = None
-        if t.body is not None:
-            body_bytes = json.dumps(t.body).encode("utf-8")
-        try:
-            status, raw = http_request(url, method=t.method, headers=t.headers, body=body_bytes)
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            violations.append(Violation(t, 0, None, f"request failed: {exc}"))
-            continue
-        try:
-            actual = json.loads(raw.decode("utf-8")) if raw else None
-        except json.JSONDecodeError:
-            actual = raw.decode("utf-8", "replace")
+        with tracer.start_as_current_span(f"test: {t.name}") as span:
+            span.set_attribute("openinference.span.kind", "TOOL")
+            span.set_attribute("tool.name", t.name)
+            span.set_attribute("tool.description", f"{t.method} {t.path} ({t.source})")
+            span.set_attribute(
+                "input.value",
+                json.dumps(
+                    {
+                        "method": t.method,
+                        "path": t.path,
+                        "headers": t.headers,
+                        "body": t.body,
+                        "expected_status_codes": t.expected_status_codes,
+                    }
+                ),
+            )
+            span.set_attribute("input.mime_type", "application/json")
 
-        if t.expected_status_codes and status not in t.expected_status_codes:
-            # For LLM tests, treat a status that IS documented for the endpoint
-            # as acceptable even if the LLM didn't list it — the LLM may have
-            # been overly narrow. Only deterministic tests demand an exact match.
-            documented = documented_statuses(spec, t.method, t.path)
-            tolerated = t.source == "llm" and status in documented
-            if not tolerated:
-                violations.append(
-                    Violation(
+            url = base + t.path
+            body_bytes = None
+            if t.body is not None:
+                body_bytes = json.dumps(t.body).encode("utf-8")
+            try:
+                status, raw = http_request(url, method=t.method, headers=t.headers, body=body_bytes)
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                violations.append(Violation(t, 0, None, f"request failed: {exc}"))
+                span.set_attribute("output.value", json.dumps({"violation": f"request failed: {exc}"}))
+                span.set_attribute("output.mime_type", "application/json")
+                continue
+            try:
+                actual = json.loads(raw.decode("utf-8")) if raw else None
+            except json.JSONDecodeError:
+                actual = raw.decode("utf-8", "replace")
+
+            violation: Violation | None = None
+            if t.expected_status_codes and status not in t.expected_status_codes:
+                # For LLM tests, treat a status that IS documented for the endpoint
+                # as acceptable even if the LLM didn't list it — the LLM may have
+                # been overly narrow. Only deterministic tests demand an exact match.
+                documented = documented_statuses(spec, t.method, t.path)
+                tolerated = t.source == "llm" and status in documented
+                if not tolerated:
+                    violation = Violation(
                         t,
                         status,
                         actual,
                         f"unexpected status {status}; spec/test expected one of {t.expected_status_codes}",
                     )
-                )
-                continue
-
-        schema = response_schema(spec, t.method, t.path, status)
-        if schema and actual is not None:
-            err = validate_body(actual, schema)
-            if err:
-                violations.append(Violation(t, status, actual, f"response body does not match schema: {err}"))
+            if violation is None:
+                schema = response_schema(spec, t.method, t.path, status)
+                if schema and actual is not None:
+                    err = validate_body(actual, schema)
+                    if err:
+                        violation = Violation(t, status, actual, f"response body does not match schema: {err}")
+            if violation is not None:
+                violations.append(violation)
+            span.set_attribute(
+                "output.value",
+                json.dumps({"status": status, "violation": violation.reason if violation else None}),
+            )
+            span.set_attribute("output.mime_type", "application/json")
     return violations
 
 
@@ -475,8 +515,14 @@ def main() -> int:
 
     violations = execute_tests(deployment_url, spec, deterministic + edge_cases)
 
+    root = trace.get_current_span()
     if not violations:
         print("[contract-test] contract holds — route to live cleared", flush=True)
+        root.set_attribute(
+            "output.value",
+            json.dumps({"verdict": "pass", "tests_run": len(deterministic) + len(edge_cases), "violations": 0}),
+        )
+        root.set_attribute("output.mime_type", "application/json")
         return 0
 
     print(f"[contract-test] {len(violations)} contract violation(s) — raising issue", flush=True)
@@ -505,12 +551,52 @@ def main() -> int:
         body += f"\nTriggering PR: #{pr_number}"
 
     issue = create_issue(token, repo, title, body)
+    root.set_attribute(
+        "output.value",
+        json.dumps({"verdict": "fail", "violations": len(violations), "issue_number": issue.get("number")}),
+    )
+    root.set_attribute("output.mime_type", "application/json")
     print(f"[contract-test] raised issue #{issue.get('number')} — route to live paused", flush=True)
     return 1
 
 
+def _traced_main() -> int:
+    """Wrap main() in an OpenInference root AGENT span.
+
+    The agent both calls an LLM (auto-instrumented child spans) and executes
+    HTTP probes (TOOL child spans), so AGENT is the appropriate root kind.
+    Session and metadata context attributes propagate to the child spans.
+    """
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    deployment_url = os.environ.get("DEPLOYMENT_URL", "")
+    model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
+    session_id = os.environ.get("GITHUB_RUN_ID", "")
+    metadata = {
+        "repo": repo,
+        "model": model,
+        "deployment_url": deployment_url,
+        "commit_sha": os.environ.get("COMMIT_SHA", ""),
+        "pr_number": os.environ.get("PR_NUMBER", ""),
+    }
+    ctx_attrs: dict = {"metadata": metadata}
+    if session_id:
+        ctx_attrs["session_id"] = session_id
+
+    tracer = trace.get_tracer("talos.contract-test")
+    with using_attributes(**ctx_attrs):
+        with tracer.start_as_current_span("talos.contract-test.run") as root:
+            root.set_attribute("openinference.span.kind", "AGENT")
+            root.set_attribute("agent.name", "talos-contract-test")
+            if session_id:
+                root.set_attribute("session.id", session_id)
+            root.set_attribute("metadata", json.dumps(metadata))
+            root.set_attribute("input.value", json.dumps({"deployment_url": deployment_url}))
+            root.set_attribute("input.mime_type", "application/json")
+            return main()
+
+
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(_traced_main())
     finally:
         _flush_tracing()
