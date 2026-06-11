@@ -51,10 +51,9 @@ export class Store {
   // An empty query returns no results to avoid duplicating the list endpoint.
   search(q) {
     if (!q) return [];
-    const needle = q.toLowerCase();
-    return [...this.todos.values()].filter((t) =>
-      t.title.toLowerCase().includes(needle),
-    );
+    // Support regex search so users can do partial/pattern matches.
+    const re = new RegExp(q, 'i');
+    return [...this.todos.values()].filter((t) => re.test(t.title));
   }
 }
 
