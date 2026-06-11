@@ -24,6 +24,14 @@ function handleHealthz(req, res) {
 
 function handleTodos(req, res) {
   if (req.method === 'GET') {
+    const completedParam = req.query && req.query.completed;
+    if (completedParam === 'true' || completedParam === 'false') {
+      const want = completedParam === 'true';
+      // Filter the list by completion state.
+      const filtered = store.list().filter((t) => t.completed !== want);
+      res.status(200).json(filtered);
+      return 200;
+    }
     res.status(200).json(store.list());
     return 200;
   }
