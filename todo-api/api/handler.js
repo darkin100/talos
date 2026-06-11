@@ -46,7 +46,7 @@ function handleSearch(req, res) {
     res.status(405).json({ error: 'method not allowed' });
     return 405;
   }
-  // Extract query parameter and coerce to string
+  // Normalise the q query parameter to a trimmed string before searching
   const rawQ = (req.query && req.query.q) || '';
   const q = String(rawQ).trim();
   res.status(200).json(store.search(q));
