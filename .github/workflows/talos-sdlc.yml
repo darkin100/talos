@@ -192,6 +192,14 @@ jobs:
           fi
           curl -fsS -X POST "$URL/api/todos" -H 'content-type: application/json' -d '{"title":"demo"}'
           curl -fsS "$URL/api/todos"
+          # The home page is part of the deployment too — a wrong Root Directory
+          # ships an empty site that 404s on "/" while every /api route still
+          # works, so the API-only checks above pass and the break is invisible.
+          # Assert the static UI is actually served (must return the app shell).
+          root=$(curl -fsS "$URL/") || { echo 'home page / did not return 200 at '"$URL" >&2; exit 1; }
+          echo "$root" | grep -q '<title>Talos Todo</title>' \
+            || { echo 'home page / returned 200 but did not serve the Todo UI at '"$URL" >&2; exit 1; }
+          echo "home page is served at $URL/"
 
   release-notes:
     needs: [deploy, smoke]
