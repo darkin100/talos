@@ -1,0 +1,15 @@
+{
+  "id": "rn-004",
+  "source": "https://github.com/darkin100/talos/pull/41",
+  "pr_number": 41,
+  "pr_title": "fix(todo-api): 405 method guard on /api/healthz (closes #38)",
+  "pr_body": "Fixes the contract violation the contract-test agent raised in #38: `POST /api/healthz` returned 200 instead of 405. Adds the method guard (matching `handleTodos`), documents 405 in `openapi.yaml`, and adds handler-level tests.\n\nImplemented by hand because the @talos code agent hung on this one (Pi stalled, run cancelled after 30+ min) \u2014 human fallback. All 9 todo-api tests pass locally.",
+  "commit_messages": [
+    "fix(todo-api): return 405 for non-GET /api/healthz\n\nContract-test agent caught this (issue #38): handleHealthz returned 200 for\nany method while every sibling route guards with 405. Add the method guard\nmatching the existing handleTodos pattern, document the 405 in openapi.yaml,\nand add a handler-level test (new test/handler.test.js) covering both the\n200 and 405 paths.\n\nImplemented directly: the @talos code agent hung on this issue (Pi stalled,\nrun 27295653691 cancelled after 30+ min) \u2014 human fallback per the same\nbounded-retry policy. Closes #38."
+  ],
+  "files_changed": [
+    "todo-api/api/handler.js",
+    "todo-api/openapi.yaml",
+    "todo-api/test/handler.test.js"
+  ]
+}

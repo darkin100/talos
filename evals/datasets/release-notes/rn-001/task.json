@@ -1,0 +1,12 @@
+{
+  "id": "rn-001",
+  "suite": "regression",
+  "agent": "release-notes",
+  "track": "wave1/B1",
+  "created": "2026-06-10",
+  "source": "https://github.com/darkin100/talos/releases/tag/v48",
+  "label": {
+    "reference": "reference.md",
+    "rationale": "Every claim in the reference must be entailed by the diff/commits. The generated v48 note had zero ungrounded claims (verified by hand 2026-06-10), including the operator note about openapi.yaml already marking completed optional \u2014 true at the merge SHA."
+  }
+}

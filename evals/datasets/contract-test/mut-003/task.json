@@ -1,0 +1,16 @@
+{
+  "id": "mut-003",
+  "suite": "regression",
+  "agent": "contract-test",
+  "created": "2026-06-11",
+  "replay": "mutation",
+  "track": "wave1/M3",
+  "source": "https://github.com/darkin100/talos/tree/eval-seed/mutation-3",
+  "label": {
+    "violation": true,
+    "endpoint": "GET /api/todos/search",
+    "expected": "documented response is a bare Todo array; mutant wraps it as {results: [...]}",
+    "mutation": "handleSearch returns {results: todos} instead of the array",
+    "rationale": "Shape-break schema seed. DEVIATION from backlog M3 (wrap GET-by-id): the deterministic test set never GETs an existing todo, so that mutant is only catchable by chance via LLM tests; the search endpoint is deterministically schema-validated. Original M3 form is a good future capability task."
+  }
+}

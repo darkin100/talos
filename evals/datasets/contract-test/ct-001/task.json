@@ -19,8 +19,14 @@
     "date": "2026-06-10",
     "issue": "https://github.com/darkin100/talos/issues/38",
     "output_file": "trial-issue-38.md",
-    "test_counts": {"deterministic": 15, "llm_edge_case": 47, "violations": 1},
-    "grading": "True positive on the agent's first run. Minor severity but real and correctly raised. The recommended-fix code example is generic Express (.get/.all), not this repo's single-handler slug router — fix prose is right, fix snippet is idiomatic-mismatch (worth noting for the triage-quality grader)."
+    "test_counts": {
+      "deterministic": 15,
+      "llm_edge_case": 47,
+      "violations": 1
+    },
+    "grading": "True positive on the agent's first run. Minor severity but real and correctly raised. The recommended-fix code example is generic Express (.get/.all), not this repo's single-handler slug router \u2014 fix prose is right, fix snippet is idiomatic-mismatch (worth noting for the triage-quality grader)."
   },
-  "notes": "First contract-test trial. Pre-existing defect surfaced organically while deploying the RCA suppression fix — not seeded."
+  "notes": "First contract-test trial. Pre-existing defect surfaced organically while deploying the RCA suppression fix \u2014 not seeded.",
+  "replay": "none",
+  "replay_note": "Historical trial: the healthz method-guard gap was fixed by PR #39, so a live replay against current main cannot reproduce it. Kept as a labelled reference trial; runnable contract-test tasks are the mutation seeds."
 }

@@ -1,0 +1,17 @@
+{
+  "id": "talos-bench-003",
+  "suite": "capability",
+  "agent": "code",
+  "track": "wave1 (retro-harvest)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/issues/46",
+  "merged_pr": "https://github.com/darkin100/talos/pull/47",
+  "base_sha": "3313cc72f32648a18dc3b8836b9b0e8b6c139dc5",
+  "label": {
+    "type": "fix-a-bug",
+    "defect_file": "todo-api/api/handler.js",
+    "defect_description": "GET /api/todos/ with an empty id returned 404 instead of the contract-mandated 400",
+    "hidden_test": "GET /api/todos/ (empty id) responds 400 (test/handler.test.js)"
+  },
+  "harness_note": "Replays in the nightly Talos-bench harness (Pi against the issue at base_sha), not in the per-PR pytest runner."
+}

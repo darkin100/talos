@@ -1,0 +1,14 @@
+{
+  "id": "sec-009",
+  "suite": "regression",
+  "agent": "security-review",
+  "track": "wave1 (clean half \u2014 merged organic PR)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/45",
+  "diff_sha": "3313cc72f32648a18dc3b8836b9b0e8b6c139dc5",
+  "label": {
+    "expected_verdict": "PASS",
+    "findings": [],
+    "rationale": "Clean merged PR (favicon static asset); no security-relevant change. FPR half of the security suite \u2014 the agent must stay silent / not block."
+  }
+}

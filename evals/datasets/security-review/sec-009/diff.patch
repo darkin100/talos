@@ -1,0 +1,41 @@
+diff --git a/todo-api/public/favicon.svg b/todo-api/public/favicon.svg
+new file mode 100644
+index 0000000..b407cf5
+--- /dev/null
++++ b/todo-api/public/favicon.svg
+@@ -0,0 +1,23 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
++  <!-- Background -->
++  <rect width="32" height="32" fill="#2563eb" rx="6"/>
++  
++  <!-- Checklist icon -->
++  <g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++    <!-- First checkbox (checked) -->
++    <rect x="6" y="8" width="4" height="4" rx="1"/>
++    <path d="M 7 10.5 l 1.5 1.5 l 2 -2"/>
++    
++    <!-- Second checkbox (unchecked) -->
++    <rect x="6" y="15" width="4" height="4" rx="1"/>
++    
++    <!-- Third checkbox (checked) -->
++    <rect x="6" y="22" width="4" height="4" rx="1"/>
++    <path d="M 7 24.5 l 1.5 1.5 l 2 -2"/>
++    
++    <!-- Text lines -->
++    <line x1="12" y1="9" x2="25" y2="9"/>
++    <line x1="12" y1="17" x2="25" y2="17"/>
++    <line x1="12" y1="24" x2="25" y2="24"/>
++  </g>
++</svg>
+diff --git a/todo-api/public/index.html b/todo-api/public/index.html
+index 5266f8f..54c0811 100644
+--- a/todo-api/public/index.html
++++ b/todo-api/public/index.html
+@@ -4,6 +4,7 @@
+     <meta charset="utf-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1" />
+     <title>Talos Todo</title>
++    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+     <style>
+       :root {
+         color-scheme: light dark;

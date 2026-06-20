@@ -7,6 +7,10 @@ Reads configuration from environment variables (provided by GitHub Actions):
     PR_NUMBER            pull request number to review
     OPENROUTER_API_KEY   OpenRouter API key for LLM access
     MODEL                model id (default: anthropic/claude-haiku-4.5)
+    DIFF_FILE            (optional) read the diff from this path instead of the
+                         GitHub API — used by eval replay for hermetic inputs
+    DRY_RUN              (optional) if set to a truthy value, do not post the PR
+                         comment; emit the artifact to stdout instead
     ARIZE_SPACE_ID       (optional) Arize AX space id; enables tracing if set
     ARIZE_API_KEY        (optional) Arize AX API key; required with ARIZE_SPACE_ID
     ARIZE_PROJECT_NAME   (optional) Arize project name (default: talos-code-review)
@@ -84,6 +88,19 @@ except ImportError:  # tracing deps absent — degrade to a no-op
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 AGENT_TAG = "<!-- talos:code-review -->"
+ARTIFACT_BEGIN = "===TALOS_EVAL_ARTIFACT_BEGIN==="
+ARTIFACT_END = "===TALOS_EVAL_ARTIFACT_END==="
+
+
+def dry_run_enabled() -> bool:
+    return os.environ.get("DRY_RUN", "").lower() not in {"", "0", "false"}
+
+
+def emit_artifact(artifact: dict) -> None:
+    """Print the would-be side effect (PR comment, issue, …) for the eval runner."""
+    print(ARTIFACT_BEGIN, flush=True)
+    print(json.dumps(artifact), flush=True)
+    print(ARTIFACT_END, flush=True)
 
 SYSTEM_PROMPT = """You are a senior software engineer performing a code review.
 Review the supplied unified diff and respond with a single JSON object of the form:
@@ -184,15 +201,23 @@ def post_pr_comment(token: str, repo: str, pr_number: str, body: str) -> None:
 
 
 def main() -> int:
-    token = env("GITHUB_TOKEN")
-    repo = env("GITHUB_REPOSITORY")
-    pr_number = env("PR_NUMBER")
     openrouter_key = env("OPENROUTER_API_KEY")
     model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
+    diff_file = os.environ.get("DIFF_FILE", "")
 
     root = trace.get_current_span()
-    print(f"[code-review] reviewing {repo}#{pr_number} with {model}", flush=True)
-    diff = fetch_pr_diff(token, repo, pr_number)
+    if diff_file:
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        pr_number = os.environ.get("PR_NUMBER", "")
+        print(f"[code-review] reviewing diff from {diff_file} with {model}", flush=True)
+        with open(diff_file, encoding="utf-8") as f:
+            diff = f.read()
+    else:
+        token = env("GITHUB_TOKEN")
+        repo = env("GITHUB_REPOSITORY")
+        pr_number = env("PR_NUMBER")
+        print(f"[code-review] reviewing {repo}#{pr_number} with {model}", flush=True)
+        diff = fetch_pr_diff(token, repo, pr_number)
     if not diff.strip():
         print("[code-review] empty diff, skipping", flush=True)
         root.set_attribute("output.value", json.dumps({"verdict": "skip", "reason": "empty diff"}))
@@ -220,7 +245,10 @@ def main() -> int:
         f"{summary}\n\n"
         f"_Model: `{model}`_"
     )
-    post_pr_comment(token, repo, pr_number, comment)
+    if dry_run_enabled():
+        emit_artifact({"verdict": verdict, "comment": comment})
+    else:
+        post_pr_comment(env("GITHUB_TOKEN"), repo, pr_number, comment)
 
     if verdict == "pass":
         print("[code-review] verdict: pass", flush=True)

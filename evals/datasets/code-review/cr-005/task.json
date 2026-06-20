@@ -1,8 +1,8 @@
 {
   "id": "cr-005",
-  "suite": "regression",
+  "suite": "capability",
   "agent": "code-review",
-  "track": "wave1 (organic — high-value false positive)",
+  "track": "wave1 (organic \u2014 high-value false positive)",
   "created": "2026-06-10",
   "source": "https://github.com/darkin100/talos/pull/41",
   "label": {
@@ -16,8 +16,9 @@
     "verdict": "FAIL (FALSE POSITIVE)",
     "output_file": "trial-2026-06-10.md",
     "diff": "diff.patch",
-    "grading": "Hallucinated defect, blocked correct work. Two fabricated claims, both falsifiable against the diff: (1) 'GET path still executes, sends two responses' — false, `return 405` exits the function before the 200 path; (2) 'test imports handler as default but handler.js does not export it as default' — false, handler.js has `export default function handler` and the test imports exactly that. Tests pass 9/9.",
+    "grading": "Hallucinated defect, blocked correct work. Two fabricated claims, both falsifiable against the diff: (1) 'GET path still executes, sends two responses' \u2014 false, `return 405` exits the function before the 200 path; (2) 'test imports handler as default but handler.js does not export it as default' \u2014 false, handler.js has `export default function handler` and the test imports exactly that. Tests pass 9/9.",
     "human_action": "override-merged by maintainer (override-rate data point)"
   },
-  "notes": "Code-review's first clean false positive. Highest-value judge-calibration / FPR example in the suite: a confident, well-written, entirely wrong FAIL that blocked a verified-correct change. Pairs with cr-004 (partial hallucination)."
+  "notes": "Code-review's first clean false positive. Highest-value judge-calibration / FPR example in the suite: a confident, well-written, entirely wrong FAIL that blocked a verified-correct change. Pairs with cr-004 (partial hallucination).",
+  "suite_note": "Reclassified regression->capability 2026-06-11: harvested FROM a live false positive (agent confidently FAILed the correct healthz fix, PR #41) and the replayed agent still false-positives on it (eval run 2026-06-11). Graduates to regression when the FPR is fixed."
 }

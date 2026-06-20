@@ -1,0 +1,6 @@
+{"timestamp": "2026-06-09T09:00:01.001Z", "level": "info", "message": "server_starting", "service": "todo-api", "port": 3000}
+{"timestamp": "2026-06-09T09:00:02.114Z", "level": "info", "message": "http_request", "service": "todo-api", "method": "GET", "path": "/api/healthz", "status": 200, "duration_ms": 1}
+{"timestamp": "2026-06-09T09:00:02.500Z", "level": "info", "message": "http_request", "service": "todo-api", "method": "GET", "path": "/api/todos", "status": 200, "duration_ms": 2}
+{"timestamp": "2026-06-09T09:00:03.000Z", "level": "error", "message": "(node:4) [DEP0169] DeprecationWarning: Setting the TLS ServerName to an IP address is not permitted by RFC 6066.", "service": "todo-api"}
+{"timestamp": "2026-06-09T09:00:03.000Z", "level": "error", "message": "(node:4) [DEP0169] DeprecationWarning: Setting the TLS ServerName to an IP address is not permitted by RFC 6066.", "service": "todo-api"}
+16:51:23.68  talos-3mead5m6k-darkin100s-projects.vercel.app  error  λ GET /api/healthz     ---     (node:4) [DEP0169] DeprecationWarning: Setting the TLS ServerName to an IP address is not permitted by RFC 6066.

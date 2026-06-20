@@ -1,0 +1,12 @@
+diff --git a/todo-api/lib/store.js b/todo-api/lib/store.js
+index d72f62a..de96270 100644
+--- a/todo-api/lib/store.js
++++ b/todo-api/lib/store.js
+@@ -25,7 +25,6 @@ export class Store {
+     const todo = {
+       id: this.nextId++,
+       title,
+-      completed: false,
+       created_at: new Date().toISOString(),
+     };
+     this.todos.set(todo.id, todo);

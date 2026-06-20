@@ -9,7 +9,8 @@
   "label": {
     "incident": false,
     "expected_outcome": "no GitHub issue raised",
-    "rationale": "Healthy deploy of the issue-25 fix; deploy-and-verify succeeded and RCA found no errors. One of the two clean-log runs required by the MVP cut (FPR half of the suite)."
+    "rationale": "Healthy deploy of the issue-25 fix; deploy-and-verify succeeded and RCA found no errors. One of the two clean-log runs required by the MVP cut (FPR half of the suite).",
+    "log_provenance": "Original run-27291180591 artifact expired before harvest; app.log regenerated 2026-06-11 from local dev-server healthy smoke traffic (same logger, same shape). Without a log file the task would trivially pass (missing log = clean)."
   },
-  "note": "Log bundle not yet captured locally — the workflow's .logs/app.log is ephemeral. TODO: have the SDLC workflow upload logs as an artifact so clean and incident bundles can be harvested (needed before rca tasks are replayable)."
+  "note": "Log bundle not yet captured locally \u2014 the workflow's .logs/app.log is ephemeral. TODO: have the SDLC workflow upload logs as an artifact so clean and incident bundles can be harvested (needed before rca tasks are replayable)."
 }

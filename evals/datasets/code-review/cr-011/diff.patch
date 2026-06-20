@@ -1,0 +1,19 @@
+diff --git a/todo-api/api/handler.js b/todo-api/api/handler.js
+index 8aef42f..0f3871b 100644
+--- a/todo-api/api/handler.js
++++ b/todo-api/api/handler.js
+@@ -24,6 +24,14 @@ function handleHealthz(req, res) {
+ 
+ function handleTodos(req, res) {
+   if (req.method === 'GET') {
++    const completedParam = req.query && req.query.completed;
++    if (completedParam === 'true' || completedParam === 'false') {
++      const want = completedParam === 'true';
++      // Filter the list by completion state.
++      const filtered = store.list().filter((t) => t.completed !== want);
++      res.status(200).json(filtered);
++      return 200;
++    }
+     res.status(200).json(store.list());
+     return 200;
+   }

@@ -1,0 +1,20 @@
+{
+  "id": "cr-015",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1/S5 (seeded, eval-seed:code-review, draft)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/65",
+  "diff_sha": "1e95946baca6404ef2898d1fef3f9d28fbbfaa7a",
+  "label": {
+    "category": "missing_test",
+    "expected_verdict": "FAIL",
+    "rationale": "New /api/todos/stats endpoint ships with no test added to the suite. A good reviewer asks for coverage on new behaviour."
+  },
+  "reference_trial": {
+    "date": "2026-06-11",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL",
+    "output_file": "trial-2026-06-11.md"
+  }
+}

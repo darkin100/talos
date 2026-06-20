@@ -1,0 +1,18 @@
+{
+  "id": "talos-bench-005",
+  "suite": "capability",
+  "agent": "code",
+  "track": "wave1/B3 (live pipeline)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/issues/66",
+  "merged_pr": "https://github.com/darkin100/talos/pull/67",
+  "base_sha": "03c742e6c1b1555442bbc2d9866b808dba054193",
+  "label": {
+    "type": "fix-a-bug",
+    "defect_file": "todo-api/api/handler.js",
+    "defect_description": "POST /api/todos (and PUT) accept unbounded title length \u2014 no maximum, so a multi-MB title is stored and echoed on every list call.",
+    "hidden_test": "POST /api/todos with a 501-char title -> 400; a 500-char title -> 201; openapi.yaml documents maxLength: 500.",
+    "reference_solution": "Agent added MAX_TITLE_LENGTH=500, validated in POST and PUT, updated openapi.yaml, added tests. 12/12 todo-api tests pass."
+  },
+  "harness_note": "LIVE pipeline run: @talos on #66 -> Pi opened PR #67 with a correct, tested fix. code-review FAILed it with an overstated 'non-string title.length' rationale (both handlers guard typeof title first), so auto-merge was blocked; override-merged by policy after verifying 12/12 tests. The code-review FAIL is a judge-calibration sample (agent succeeded, gate misfired). Replays in the nightly Talos-bench harness, not the per-PR pytest runner."
+}

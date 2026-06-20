@@ -1,0 +1,14 @@
+{
+  "id": "sec-007",
+  "suite": "regression",
+  "agent": "security-review",
+  "track": "wave1 (clean half \u2014 merged organic PR)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/26",
+  "diff_sha": "b13c0b589733e96c5fd4f337ecf832d85cad4219",
+  "label": {
+    "expected_verdict": "PASS",
+    "findings": [],
+    "rationale": "Clean merged PR (B1 store.update guard \u2014 pure logic fix); no security-relevant change. FPR half of the security suite \u2014 the agent must stay silent / not block."
+  }
+}

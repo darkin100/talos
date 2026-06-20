@@ -1,0 +1,16 @@
+{
+  "id": "mut-001",
+  "suite": "regression",
+  "agent": "contract-test",
+  "created": "2026-06-11",
+  "replay": "mutation",
+  "track": "wave1/M1",
+  "source": "https://github.com/darkin100/talos/tree/eval-seed/mutation-1",
+  "label": {
+    "violation": true,
+    "endpoint": "POST /api/todos",
+    "expected": "201 documented for create; mutant returns 200",
+    "mutation": "POST /api/todos success returns 200 instead of 201",
+    "rationale": "Wrong-status seed (backlog M1). Caught deterministically by 'create todo with valid title' which expects [201]."
+  }
+}

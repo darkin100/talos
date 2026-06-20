@@ -1,0 +1,16 @@
+{
+  "id": "mut-002",
+  "suite": "regression",
+  "agent": "contract-test",
+  "created": "2026-06-11",
+  "replay": "mutation",
+  "track": "wave1/M2",
+  "source": "https://github.com/darkin100/talos/tree/eval-seed/mutation-2",
+  "label": {
+    "violation": true,
+    "endpoint": "POST /api/todos",
+    "expected": "response body must match Todo schema (completed is required)",
+    "mutation": "store.create() drops the `completed` field from the todo",
+    "rationale": "Required-field schema seed. DEVIATION from backlog M2 ('drops created_at'): created_at is NOT in the Todo schema's required list, so dropping it is spec-legal and the mutant would survive for spec reasons, not agent reasons. `completed` IS required, preserving the seed's intent."
+  }
+}

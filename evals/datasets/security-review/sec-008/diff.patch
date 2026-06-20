@@ -1,0 +1,41 @@
+diff --git a/todo-api/api/handler.js b/todo-api/api/handler.js
+index c0338d9..8aef42f 100644
+--- a/todo-api/api/handler.js
++++ b/todo-api/api/handler.js
+@@ -110,7 +110,7 @@ export default function handler(req, res) {
+   const slug = Array.isArray(slugRaw)
+     ? slugRaw
+     : slugRaw
+-      ? slugRaw.split('/').filter(Boolean)
++      ? slugRaw.split('/')
+       : [];
+   const path = '/api/' + slug.join('/');
+   let status = 500;
+diff --git a/todo-api/dev-server.js b/todo-api/dev-server.js
+index d66817d..da6fb7e 100644
+--- a/todo-api/dev-server.js
++++ b/todo-api/dev-server.js
+@@ -99,7 +99,7 @@ const server = createServer(async (req, res) => {
+   const path = url.pathname;
+ 
+   if (path.startsWith('/api/')) {
+-    req.query.slug = path.slice('/api/'.length).split('/').filter(Boolean);
++    req.query.slug = path.slice('/api/'.length).split('/');
+     return handler(req, res);
+   }
+   return serveStatic(req, res, path);
+diff --git a/todo-api/test/handler.test.js b/todo-api/test/handler.test.js
+index 6443f90..be7e0a2 100644
+--- a/todo-api/test/handler.test.js
++++ b/todo-api/test/handler.test.js
+@@ -35,3 +35,10 @@ test('POST /api/healthz returns 405 (method guard)', () => {
+   assert.equal(res.statusCode, 405);
+   assert.deepEqual(res.body, { error: 'method not allowed' });
+ });
++
++test('GET /api/todos/ with empty id returns 400', () => {
++  const res = mockRes();
++  handler({ method: 'GET', query: { slug: 'todos/' } }, res);
++  assert.equal(res.statusCode, 400);
++  assert.deepEqual(res.body, { error: 'invalid todo id' });
++});

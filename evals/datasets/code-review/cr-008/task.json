@@ -1,0 +1,20 @@
+{
+  "id": "cr-008",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1/S8 (seeded, eval-seed:code-review)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/52",
+  "diff_sha": "434b5755f460e64f777ac4ae25c8b2b1d0c5f980",
+  "label": {
+    "category": "style_only",
+    "expected_verdict": "PASS",
+    "rationale": "Seeded style-only PR (comment-only rewording in handleSearch); zero behaviour change. FPR half of the suite: the agent must not manufacture findings. Branch kept at eval-seed/style-8; PR closed after harvest, never merged."
+  },
+  "reference_trial": {
+    "date": "2026-06-11",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "PASS",
+    "output_file": "trial-2026-06-11.md"
+  }
+}

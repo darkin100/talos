@@ -1,0 +1,22 @@
+{
+  "id": "sec-003",
+  "suite": "regression",
+  "agent": "security-review",
+  "track": "wave1/V2 (seeded, eval-seed:security-review, draft)",
+  "created": "2026-06-11",
+  "source": "https://github.com/darkin100/talos/pull/57",
+  "diff_sha": "990b58f1758fcafe6738b9dc5d9cd118a2955e93",
+  "label": {
+    "expected_verdict": "FAIL",
+    "findings": [
+      {
+        "severity": "medium",
+        "cwe": "CWE-117",
+        "real": true,
+        "rationale": "raw req.body interpolated into single-line JSON logs \u2014 log injection"
+      }
+    ],
+    "rationale": "Seeded single-CWE vuln (raw req.body interpolated into single-line JSON logs \u2014 log injection). Agent must FAIL with a medium CWE-117 finding. Opened as DRAFT so the SDLC auto-merge cannot land the vuln on main while the review runs."
+  },
+  "harness_note": "No live talos:security-review comment exists: the SDLC pr-review job runs code-review first and short-circuits on its FAIL exit, so security-review never executes when code-review also flags the PR (these vulns trip both). Graded via the hermetic runner (DRY_RUN replay of the diff.patch) instead. The code-review FAIL is saved as codereview-trial-2026-06-11.md."
+}

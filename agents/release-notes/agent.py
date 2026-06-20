@@ -9,6 +9,11 @@ run after the PR is merged in the workflow.
     OPENROUTER_API_KEY   OpenRouter API key
     MODEL                model id (default: anthropic/claude-haiku-4.5)
     RELEASE_TAG          optional tag to attach the release to (e.g. v0.1.0)
+    INPUT_FILE           (optional) JSON file with {pr_title, pr_body,
+                         commit_messages: [..]} — bypasses the GitHub API so
+                         eval replay is hermetic
+    DRY_RUN              (optional) if set to a truthy value, do not create the
+                         GitHub release; emit the notes to stdout instead
     ARIZE_SPACE_ID       (optional) Arize AX space id; enables tracing if set
     ARIZE_API_KEY        (optional) Arize AX API key; required with ARIZE_SPACE_ID
     ARIZE_PROJECT_NAME   (optional) Arize project name (default: talos-release-notes)
@@ -88,6 +93,20 @@ except ImportError:  # tracing deps absent — degrade to a no-op
 
 GITHUB_API = "https://api.github.com"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+ARTIFACT_BEGIN = "===TALOS_EVAL_ARTIFACT_BEGIN==="
+ARTIFACT_END = "===TALOS_EVAL_ARTIFACT_END==="
+
+
+def dry_run_enabled() -> bool:
+    return os.environ.get("DRY_RUN", "").lower() not in {"", "0", "false"}
+
+
+def emit_artifact(artifact: dict) -> None:
+    """Print the would-be side effect (PR comment, issue, …) for the eval runner."""
+    print(ARTIFACT_BEGIN, flush=True)
+    print(json.dumps(artifact), flush=True)
+    print(ARTIFACT_END, flush=True)
+
 
 SYSTEM_PROMPT = """You are a technical writer producing release notes for an
 engineering audience. Given the PR title, body and commit messages, write
@@ -153,21 +172,33 @@ def create_release(token: str, repo: str, tag: str, name: str, body: str) -> Non
 
 
 def main() -> int:
-    token = env("GITHUB_TOKEN")
-    repo = env("GITHUB_REPOSITORY")
-    pr_number = env("PR_NUMBER")
     openrouter_key = env("OPENROUTER_API_KEY")
     model = os.environ.get("MODEL", "anthropic/claude-haiku-4.5")
     release_tag = os.environ.get("RELEASE_TAG", "")
+    input_file = os.environ.get("INPUT_FILE", "")
 
-    print(f"[release-notes] generating for {repo}#{pr_number}", flush=True)
-    pr = fetch_pr(token, repo, pr_number)
-    commits = fetch_pr_commits(token, repo, pr_number)
-    commit_lines = "\n".join(f"- {c['commit']['message'].splitlines()[0]}" for c in commits)
+    if input_file:
+        pr_number = os.environ.get("PR_NUMBER", "")
+        print(f"[release-notes] generating from {input_file}", flush=True)
+        with open(input_file, encoding="utf-8") as f:
+            payload = json.load(f)
+        pr_title = payload.get("pr_title", "")
+        pr_body = payload.get("pr_body") or "(empty)"
+        commit_lines = "\n".join(f"- {m.splitlines()[0]}" for m in payload.get("commit_messages", []))
+    else:
+        token = env("GITHUB_TOKEN")
+        repo = env("GITHUB_REPOSITORY")
+        pr_number = env("PR_NUMBER")
+        print(f"[release-notes] generating for {repo}#{pr_number}", flush=True)
+        pr = fetch_pr(token, repo, pr_number)
+        commits = fetch_pr_commits(token, repo, pr_number)
+        pr_title = pr.get("title", "")
+        pr_body = pr.get("body") or "(empty)"
+        commit_lines = "\n".join(f"- {c['commit']['message'].splitlines()[0]}" for c in commits)
 
     prompt = (
-        f"PR title: {pr.get('title', '')}\n\n"
-        f"PR body:\n{pr.get('body') or '(empty)'}\n\n"
+        f"PR title: {pr_title}\n\n"
+        f"PR body:\n{pr_body}\n\n"
         f"Commits:\n{commit_lines}\n"
     )
     client = OpenAI(
@@ -183,6 +214,10 @@ def main() -> int:
     root.set_attribute("output.value", notes)
     root.set_attribute("output.mime_type", "text/plain")
 
+    if dry_run_enabled():
+        emit_artifact({"notes": notes})
+        return 0
+
     workspace = Path("/workspace")
     if workspace.exists():
         output = workspace / "RELEASE_NOTES.md"
@@ -193,7 +228,7 @@ def main() -> int:
 
     if release_tag:
         name = f"{release_tag} — PR #{pr_number}"
-        create_release(token, repo, release_tag, name, notes)
+        create_release(env("GITHUB_TOKEN"), env("GITHUB_REPOSITORY"), release_tag, name, notes)
         print(f"[release-notes] created release {release_tag}", flush=True)
 
     return 0
