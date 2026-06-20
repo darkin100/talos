@@ -45,6 +45,7 @@ INFRA_PATTERNS = [
     r"TLS handshake timeout",
     r"Cannot connect to the Docker daemon",
     r"connection reset by peer",
+    r"could not determine a code-review verdict",  # Pi never emitted a verdict
 ]
 
 
@@ -133,14 +134,22 @@ def run_agent(
     mounts: dict[str, str] | None = None,
     mode: str = "docker",
     timeout_s: int = 300,
+    mounts_rw: dict[str, str] | None = None,
 ) -> Trial:
-    """Run one agent trial. mounts maps host path -> container path (ro)."""
+    """Run one agent trial.
+
+    mounts maps host path -> container path (read-only). mounts_rw is the same
+    but writable — used for a Pi review workspace, where the agent may write
+    scratch files into the checkout it reviews (the copy is ephemeral).
+    """
     if mode == "docker":
         cmd = ["docker", "run", "--rm", "--add-host", "host.docker.internal:host-gateway"]
         for key, value in env.items():
             cmd += ["-e", f"{key}={value}"]
         for host, container in (mounts or {}).items():
             cmd += ["-v", f"{host}:{container}:ro"]
+        for host, container in (mounts_rw or {}).items():
+            cmd += ["-v", f"{host}:{container}"]
         cmd.append(build_image(agent))
     else:  # direct: run agent.py with the host python (deps must be installed)
         import os
@@ -182,7 +191,7 @@ def run_agent(
 
 
 def replay_review_agent(agent: str, task: Task, *, mode: str, model: str | None, timeout_s: int) -> Trial:
-    """code-review / security-review: hermetic diff from the task dir."""
+    """security-review: hermetic diff from the task dir (no workspace needed)."""
     diff_file = task.path / "diff.patch"
     if not diff_file.exists():
         raise InfraFailure(f"{task.task_id}: no diff.patch in task dir (not hermetic yet)")
@@ -201,6 +210,61 @@ def replay_review_agent(agent: str, task: Task, *, mode: str, model: str | None,
         env["DIFF_FILE"] = str(diff_file)
         mounts = None
     return run_agent(agent, env, mounts, mode=mode, timeout_s=timeout_s)
+
+
+def replay_code_review(task: Task, *, mode: str, model: str | None, timeout_s: int) -> Trial:
+    """code-review (Pi): give the agent the diff AND the code it touches.
+
+    The reviewer reads full files, so the replay must reconstruct the reviewed
+    state, not just hand over a diff. Copy todo-api, apply diff.patch so the
+    workspace is the PR-head (post-change) tree, then point Pi at it. The diff
+    is also passed via DIFF_FILE so the agent knows what changed.
+    """
+    diff_file = task.path / "diff.patch"
+    if not diff_file.exists():
+        raise InfraFailure(f"{task.task_id}: no diff.patch in task dir (not hermetic yet)")
+
+    with tempfile.TemporaryDirectory(prefix="talos-eval-cr-") as tmp:
+        shutil.copytree(REPO_ROOT / "todo-api", Path(tmp) / "todo-api")
+        # Patches are repo-rooted (a/todo-api/...); apply from tmp where the
+        # copied tree sits at the same todo-api/ prefix to reach PR-head state.
+        apply = subprocess.run(
+            ["git", "apply", str(diff_file)],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+        )
+        if apply.returncode != 0:
+            # The stored diff no longer applies to the current todo-api (the
+            # base drifted). We can't reconstruct the reviewed post-change tree,
+            # and reviewing against the unpatched tree mis-grades real-defect
+            # tasks (the defect lives only in the diff, so the reviewer can't
+            # see it) — proven on cr-004. Skip honestly rather than guess; the
+            # task needs re-harvesting against current main or a pinned base SHA.
+            raise InfraFailure(
+                f"{task.task_id}: diff.patch no longer applies to current todo-api "
+                f"(stale fixture — re-harvest needed): {apply.stderr.strip()[:300]}"
+            )
+
+        env = {
+            "DRY_RUN": "1",
+            "OPENROUTER_API_KEY": _require_env("OPENROUTER_API_KEY"),
+            "GITHUB_REPOSITORY": task.data.get("source", ""),
+            "PR_NUMBER": task.task_id,
+        }
+        if model:
+            env["MODEL"] = model
+        if mode == "docker":
+            env["WORKSPACE"] = "/workspace"
+            env["DIFF_FILE"] = "/task/diff.patch"
+            mounts = {str(task.path): "/task"}
+            mounts_rw = {tmp: "/workspace"}
+        else:
+            env["WORKSPACE"] = tmp
+            env["DIFF_FILE"] = str(diff_file)
+            mounts = None
+            mounts_rw = None
+        return run_agent("code-review", env, mounts, mode=mode, timeout_s=timeout_s, mounts_rw=mounts_rw)
 
 
 def replay_rca(task: Task, *, mode: str, model: str | None, timeout_s: int) -> Trial:
@@ -302,7 +366,7 @@ def replay_contract_test(task: Task, *, mode: str, model: str | None, timeout_s:
 
 
 REPLAYERS = {
-    "code-review": lambda task, **kw: replay_review_agent("code-review", task, **kw),
+    "code-review": replay_code_review,
     "security-review": lambda task, **kw: replay_review_agent("security-review", task, **kw),
     "rca": replay_rca,
     "release-notes": replay_release_notes,

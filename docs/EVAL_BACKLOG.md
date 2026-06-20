@@ -220,6 +220,32 @@ Observed 2026-06-11 while harvesting the seeded fixtures (Wave 1 build-out):
    plant credentials that read as hardcoded secrets to a reviewer but don't
    match push-protection regexes.
 
+Observed 2026-06-20 while fixing the code-review false positives (cr-005, cr-016):
+
+9. **Diff-only review caused convention-blind false positives → agent rewritten
+   to use Pi with code access.** The code-review agent reviewed only the unified
+   diff (~3 lines of context), so it invented defects the surrounding file
+   contradicts (cr-016: "this `return 400` is wrong" when every handler in the
+   file returns a numeric status; cr-005: a hallucinated double-response and a
+   non-existent missing default export). Rewrote the agent to drive Pi inside a
+   checkout of the repo so it reads full files and must ground each claimed
+   defect in the actual code. Result on the regression suite: cr-016 flips to a
+   correct PASS, graduates capability→regression, and recall holds (cr-011/012/
+   013 real-defect and cr-015 missing-test still correctly FAIL; style-only
+   PRs stay silent). Two sub-findings worth keeping:
+   - *Verdict non-determinism.* A small model driving the agentic loop sometimes
+     ends without emitting the final JSON verdict. The agent now retries
+     (bounded) and treats a persistent no-verdict as an **infra skip**, never a
+     graded fail — a crash-to-fail on a clean PR would manufacture the very
+     false positives this fix removes.
+   - *Workspace replay needs the diff to apply.* The hermetic replay rebuilds
+     the reviewed tree by applying `diff.patch` to current `todo-api`. Six older
+     fixtures (cr-001/002/003/004/005/009) were harvested against drifted bases
+     and no longer apply, so they now infra-skip. Reviewing them against the
+     unpatched tree was tried and **mis-graded a real defect** (cr-004 passed —
+     the defect lives only in the diff), so skipping is the honest behaviour.
+     Re-harvest against current main or pin a base SHA to restore coverage.
+
 Implication for the strategy: distinguish *infra/harness failure* from *agent
 failure* before computing pass rates; add timeouts + bounded-retry +
 human-escalation as first-class harness behaviour (exercised manually on #33
