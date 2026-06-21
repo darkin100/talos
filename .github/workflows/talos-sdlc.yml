@@ -75,8 +75,12 @@ jobs:
             talos/security-review:v1
 
   auto-merge:
-    needs: pr-review
-    if: github.event_name == 'pull_request' || github.event_name == 'repository_dispatch'
+    # Block the merge until the review agents AND the pre-merge
+    # test → deploy → smoke chain have all gone green. `success()` is required:
+    # the explicit event `if` overrides the implicit needs-succeeded gate, so
+    # without it a failed test/smoke would still let a broken PR auto-merge.
+    needs: [pr-review, smoke]
+    if: ${{ success() && (github.event_name == 'pull_request' || github.event_name == 'repository_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - name: Auto-merge PR
@@ -95,15 +99,34 @@ jobs:
   #
   # Each job runs on a fresh runner, so agent images are built in the job
   # that uses them and data (preview URL, merged PR number) flows through
-  # job outputs. Only `test` carries the trigger condition; everything
-  # downstream inherits it through `needs`.
+  # job outputs.
+  #
+  # test → deploy → smoke run on BOTH flows: pre-merge on PRs (gating
+  # auto-merge) and post-merge on main (gating promotion). The production
+  # tail — release-notes, contract-test, promote, rca — is fenced to the merge
+  # flow (push to main / workflow_dispatch) so a PR preview is never promoted
+  # to production. Because the tail no longer inherits a single trigger
+  # condition through `needs`, each tail job carries its own explicit
+  # merge-flow `if`.
 
   test:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    # Every trigger: pre-merge on PRs (pull_request and the agent's
+    # repository_dispatch) and post-merge on main / manual dispatch.
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      # On the agent PR path (repository_dispatch) the default checkout lands on
+      # main; pull the PR head so tests run against the proposed change.
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.client_payload.pr_number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'repository_dispatch' && format('refs/pull/{0}/head', env.PR_NUMBER) || '' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -120,12 +143,16 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # See `test`: on the agent PR path keep the preview build on the PR head.
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.client_payload.pr_number }}
     outputs:
       url: ${{ steps.deploy.outputs.url }}
       pr_number: ${{ steps.pr.outputs.number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'repository_dispatch' && format('refs/pull/{0}/head', env.PR_NUMBER) || '' }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -203,9 +230,10 @@ jobs:
 
   release-notes:
     needs: [deploy, smoke]
-    # Pushes without a merged PR (e.g. direct commits) have nothing to write
-    # notes for; the job is skipped rather than failed so promote can proceed.
-    if: needs.deploy.outputs.pr_number != ''
+    # Merge flow only — a PR preview has nothing to release. Pushes without a
+    # merged PR (e.g. direct commits) also have no notes to write; that case is
+    # skipped (empty pr_number) rather than failed so promote can proceed.
+    if: ${{ needs.deploy.outputs.pr_number != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -235,6 +263,10 @@ jobs:
 
   contract-test:
     needs: [deploy, smoke]
+    # Merge flow only — the production contract suite / promotion tail must not
+    # run for a PR preview. `success()` preserves the needs-succeeded gate that
+    # the explicit event `if` would otherwise drop.
+    if: ${{ success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -274,7 +306,8 @@ jobs:
     # promotion, a skipped release-notes does not. Equivalent explicit form:
     #   needs.contract-test.result == 'success' &&
     #   (needs.release-notes.result == 'success' || needs.release-notes.result == 'skipped')
-    if: ${{ !failure() && !cancelled() }}
+    # ...and merge flow only: never promote a PR preview to production.
+    if: ${{ !failure() && !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     env:
       # Project linkage without a checkout: the monolithic job ran promote
@@ -297,6 +330,9 @@ jobs:
 
   rca:
     needs: [deploy, promote]
+    # Merge flow only (promote only runs there anyway). `success()` keeps the
+    # needs-succeeded gate intact alongside the explicit event check.
+    if: ${{ success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
