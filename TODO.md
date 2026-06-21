@@ -40,6 +40,20 @@ item at a time; tick when the doc (or repo) reflects the change.
   Also sanity-check the $5 nightly figure against six capability suites + the
   mutation sweep.
 
+- [ ] **12. Harvest Arize AX traces into the dataset suite.** *(Strategy
+  written 2026-06-21: new [EVAL_STRATEGY.md §3.5](docs/EVAL_STRATEGY.md). The
+  agents already trace every run to Arize AX as OpenInference spans (root
+  `talos.<agent>.run`, kind `AGENT`, `input.value`/`output.value` JSON); that
+  trace store is the production sample the suite-refresh cadence needs.)*
+  Remaining build: a `evals/scripts/harvest_arize.py` that exports root spans
+  (`ArizeExportClient.export_model_to_df(..., Environments.TRACING, ...)`),
+  filters out `InfraFailure` spans, scrubs secrets/PII, maps `input.value`→the
+  hermetic input + `output.value`→`reference_trial`, freezes the code-review
+  `source/` snapshot, and writes `evals/datasets/<agent>/<id>/`. Label via Arize
+  annotations (TODO #3 mechanism); admit to capability; tag the source window so
+  prompt-tuning can be held out (contamination guard). Harvest overrides + FPs
+  first — that path is currently manual (cr-005/cr-016/sec-012).
+
 - [ ] **5. Make the gates statistically sound — specify trials per task.** The
   strategy gates on single thresholds ("block if F1 drops > 5 pp") with no
   trial count; on a 20-task suite one task = 5 pp, so a single flaky trial
@@ -53,6 +67,11 @@ item at a time; tick when the doc (or repo) reflects the change.
   `@create_evaluator` / `Client().evaluators.register` code doesn't obviously
   match Phoenix's documented surface (`phoenix.experiments.run_experiment`,
   evals library). Pin it to a tested Phoenix version or label it pseudocode.
+  *(2026-06-21: §3.3 lead now labels the snippet pseudocode and points at the
+  real substrate. The Arize-side surface for §3.5 is confirmed —
+  `arize.exporter.ArizeExportClient.export_model_to_df` (SDK ≥ 7.0.3) and
+  `arize.experimental.datasets.ArizeDatasetsClient.create_dataset/run_experiment`.
+  Still to pin: the online-evaluator registration call itself.)*
 
 - [x] **7. Pick one CI eval tool.** *(Done 2026-06-11: the `evals/` runner is
   plain pytest — no DeepEval. Strategy §4 Phase 0 updated; Phoenix deferred
