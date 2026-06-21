@@ -221,6 +221,11 @@ jobs:
   smoke:
     needs: deploy
     runs-on: ubuntu-latest
+    env:
+      # PR context for the failure comment below — covers both the pull_request
+      # trigger and the agent's repository_dispatch trigger. Empty on a direct
+      # push to main, which is how the comment step self-skips off-PR.
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.client_payload.pr_number }}
     steps:
       - name: Smoke deployment
         run: |
@@ -243,11 +248,32 @@ jobs:
           # The home page is part of the deployment too — a wrong Root Directory
           # ships an empty site that 404s on "/" while every /api route still
           # works, so the API-only checks above pass and the break is invisible.
-          # Assert the static UI is actually served (must return the app shell).
+          # Assert the static UI is actually served by matching a structural
+          # element of the Todo app shell. Deliberately NOT the <title>/<h1>
+          # text: that is branding copy which legitimately changes (PR #75
+          # renamed it and turned this into a false failure), whereas the
+          # #todo-list container is load-bearing app structure.
           root=$(curl -fsS "$URL/") || { echo 'home page / did not return 200 at '"$URL" >&2; exit 1; }
-          echo "$root" | grep -q '<title>Talos Todo</title>' \
+          echo "$root" | grep -q 'id="todo-list"' \
             || { echo 'home page / returned 200 but did not serve the Todo UI at '"$URL" >&2; exit 1; }
           echo "home page is served at $URL/"
+
+      # Surface a smoke failure on the PR itself. Without this a red smoke run
+      # only appears in the Actions tab and silently blocks auto-merge, with no
+      # signal on the PR. Runs only when a step above failed and we have a PR.
+      - name: Report smoke failure on PR
+        if: ${{ failure() && env.PR_NUMBER != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          URL: ${{ needs.deploy.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          body=$(printf '%s\n' \
+            "❌ **Smoke tests failed** on the preview deployment — auto-merge is blocked until they pass." \
+            "" \
+            "- Preview: $URL" \
+            "- Logs: $RUN_URL")
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$body"
 
   release-notes:
     needs: [deploy, smoke]
