@@ -64,19 +64,25 @@ item at a time; tick when the doc (or repo) reflects the change.
   baseline (not nightly)". §5 contamination note holds unchanged.)*
   It measures the model + Pi scaffold on foreign repos, not the Talos harness.
 
-- [ ] **12. Harvest Arize AX traces into the dataset suite.** *(Strategy
-  written 2026-06-21: new [EVAL_STRATEGY.md §3.5](docs/EVAL_STRATEGY.md). The
-  agents already trace every run to Arize AX as OpenInference spans (root
-  `talos.<agent>.run`, kind `AGENT`, `input.value`/`output.value` JSON); that
-  trace store is the production sample the suite-refresh cadence needs.)*
-  Remaining build: a `evals/scripts/harvest_arize.py` that exports root spans
-  (`ArizeExportClient.export_model_to_df(..., Environments.TRACING, ...)`),
-  filters out `InfraFailure` spans, scrubs secrets/PII, maps `input.value`→the
-  hermetic input + `output.value`→`reference_trial`, freezes the code-review
-  `source/` snapshot, and writes `evals/datasets/<agent>/<id>/`. Label via Arize
-  annotations (TODO #3 mechanism); admit to capability; tag the source window so
-  prompt-tuning can be held out (contamination guard). Harvest overrides + FPs
-  first — that path is currently manual (cr-005/cr-016/sec-012).
+- [x] **12. Harvest Arize AX traces into the dataset suite.** *(Done 2026-06-21:
+  built `evals/scripts/harvest_arize.py` + `test_harvest_arize.py` (18 tests,
+  no network/arize/docker) implementing EVAL_STRATEGY.md §3.5.)* The agents
+  trace every run to Arize AX as OpenInference spans (root `talos.<agent>.run`,
+  kind `CHAIN` — corrected from the strategy's original `AGENT`; the harvester
+  accepts both). The harvester exports root spans
+  (`ArizeExportClient.export_model_to_df(..., Environments.TRACING, ...)`, lazy
+  import; offline `--from-file` path needs neither arize nor a network), filters
+  out `InfraFailure` spans by reusing `runner.INFRA_PATTERNS`, scrubs
+  secrets/PII before writing, maps `input.value`→the hermetic input +
+  `output.value`→`reference_trial`, admits to **capability** with a
+  `source_window` contamination-guard tag and a `NEEDS_LABEL` placeholder
+  (maintainer fills from an Arize annotation). Documented divergences handled:
+  trace payloads aren't in spans → `NEEDS_HYDRATION` input stubs; code-review →
+  `NEEDS_SHA` + `capture_snapshot.sh` marker for the `source/` freeze;
+  contract-test skipped (no `mutation.patch` in a trace). `arize`/`pandas` kept
+  out of `evals/requirements.txt` (CI stays lean) — they live in
+  `evals/scripts/requirements-harvest.txt`. Harvest overrides + FPs first —
+  that path was previously manual (cr-005/cr-016/sec-012).
 
 - [x] **5. Make the gates statistically sound — specify trials per task.**
   *(Done 2026-06-21.)* The original ask: the strategy gated on single

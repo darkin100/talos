@@ -276,7 +276,8 @@ on stage.
 Already there — every agent emits OpenInference spans to **Arize AX**
 (`arize-otel`'s `register()` + `OpenAIInstrumentor`; see
 `agents/*/agent.py:_setup_arize_tracing`). Each run's root span is
-`talos.<agent>.run` (kind `AGENT`) carrying `input.value` / `output.value` as
+`talos.<agent>.run` (kind `CHAIN` — the agents wrap `main()` in a root
+OpenInference CHAIN span) carrying `input.value` / `output.value` as
 JSON plus `session.id`, `metadata`, and the propagated `pr_number`. The sketch
 below is written against Phoenix's evaluator API; the same wiring runs on Arize
 AX's online-evals surface. **The code block below is illustrative pseudocode, not a tested call**
@@ -375,7 +376,7 @@ The harvest, step by step:
                 "attributes.input.value", "attributes.output.value",
                 "attributes.metadata", "attributes.session.id"],
    )
-   # keep one root span per trace: name == "talos.<agent>.run" and kind == "AGENT"
+   # keep one root span per trace: name == "talos.<agent>.run" and kind in {"CHAIN", "AGENT"}
    ```
 
 2. **Map to the task schema.** Each root span becomes one

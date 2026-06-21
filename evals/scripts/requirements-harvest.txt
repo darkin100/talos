@@ -1,0 +1,13 @@
+# Dependencies for LIVE Arize export only (evals/scripts/harvest_arize.py).
+#
+# Deliberately NOT in evals/requirements.txt: CI installs that to run the
+# pytest eval gate, which must stay lean and needs neither arize nor pandas.
+# The harvester imports these lazily, so the offline --from-file (json/jsonl)
+# path and the unit test run without them.
+#
+#   pip install -r evals/scripts/requirements-harvest.txt
+#
+# Needed only when harvesting straight from Arize (no --from-file) or when
+# loading an exported .parquet/.csv (pandas).
+arize>=7.0.3
+pandas
