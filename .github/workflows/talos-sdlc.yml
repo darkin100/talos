@@ -16,6 +16,9 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # The CLI deploy/promote populate the GitHub Deployments API themselves
+  # (the old Vercel Git integration used to do this; it has been disconnected).
+  deployments: write
 
 jobs:
   pr-review:
@@ -189,6 +192,24 @@ jobs:
           gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
             -f body="talos-preview: ${{ steps.deploy.outputs.url }}" || true
 
+      # Register the deployment in the GitHub Deployments API so the repo's
+      # Environments view links to this preview. The CLI deploy above does not
+      # do this on its own (the old Vercel Git integration did). `required_contexts:[]`
+      # bypasses status gating (PR checks may still be running); the success
+      # status auto-inactivates the prior Preview deployment so the link always
+      # points at the latest build.
+      - name: Register GitHub Deployment (preview)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          dep_id=$(jq -nc --arg sha "${{ github.sha }}" \
+            '{ref:$sha,environment:"Preview",description:"Talos SDLC preview",auto_merge:false,transient_environment:true,required_contexts:[]}' \
+            | gh api repos/${{ github.repository }}/deployments --input - --jq '.id')
+          jq -nc --arg url "$URL" \
+            '{state:"success",environment:"Preview",environment_url:$url,log_url:$url,description:"Deployed by Talos SDLC"}' \
+            | gh api repos/${{ github.repository }}/deployments/"$dep_id"/statuses --input -
+
       - name: Resolve merged PR number
         id: pr
         env:
@@ -327,6 +348,23 @@ jobs:
         run: |
           vercel promote ${{ needs.deploy.outputs.url }} --yes --scope=${{ secrets.VERCEL_ORG_ID }} --token=${{ secrets.VERCEL_TOKEN }}
           echo "Promoted ${{ needs.deploy.outputs.url }} to production"
+
+      # Mirror the preview registration for production: point the GitHub
+      # "Production" environment at the deployment we just promoted. The
+      # environment_url is the promoted deployment's URL (the same one smoke,
+      # contract-test, and rca treat as canonical); swap to a stable alias here
+      # if a clean production domain is preferred.
+      - name: Register GitHub Deployment (production)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          URL: ${{ needs.deploy.outputs.url }}
+        run: |
+          dep_id=$(jq -nc --arg sha "${{ github.sha }}" \
+            '{ref:$sha,environment:"Production",description:"Talos SDLC production",auto_merge:false,production_environment:true,required_contexts:[]}' \
+            | gh api repos/${{ github.repository }}/deployments --input - --jq '.id')
+          jq -nc --arg url "$URL" \
+            '{state:"success",environment:"Production",environment_url:$url,log_url:$url,description:"Promoted by Talos SDLC"}' \
+            | gh api repos/${{ github.repository }}/deployments/"$dep_id"/statuses --input -
 
   rca:
     needs: [deploy, promote]
