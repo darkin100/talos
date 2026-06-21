@@ -1,0 +1,36 @@
+{
+  "id": "sec-012",
+  "suite": "capability",
+  "agent": "security-review",
+  "track": "wave1 (organic — false positive, live @talos pipeline)",
+  "created": "2026-06-21",
+  "source": "https://github.com/darkin100/talos/pull/76",
+  "diff_sha": "e0bad5c57f2a0f931e1e1bce2e14bccb96754f3b",
+  "label": {
+    "expected_verdict": "PASS",
+    "findings": [],
+    "rationale": "PR #76 hardens the smoke test (matches a structural app-shell marker, id=\"todo-list\", instead of a hardcoded <title> string) and adds a failure-comment step to the smoke job. The two shell variables the agent flags are ALREADY double-quoted at every use: the added line is `gh pr comment \"$PR_NUMBER\" --repo \"${{ github.repository }}\" --body \"$body\"`, and every $URL use is quoted (`curl -fsS \"$URL/\"`, `\"$URL/api/healthz\"`, `\"$URL\"`). There is no unquoted usage and no injection vector: PR_NUMBER is a positional argument to gh (not shell-eval'd), sourced from github.event.pull_request.number (always an integer) or a write-access-only repository_dispatch payload. A correct reviewer passes this PR."
+  },
+  "reference_trial": {
+    "date": "2026-06-21",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL (FALSE POSITIVE)",
+    "diff": "diff.patch",
+    "output_file": "trial-2026-06-21.md",
+    "findings_claimed": [
+      {
+        "severity": "MEDIUM",
+        "title": "Potential Command Injection via Unquoted Variable in gh pr comment",
+        "detail": "Claims PR_NUMBER is used without proper quoting in `gh pr comment \"$PR_NUMBER\"` and recommends quoting it as `gh pr comment \"$PR_NUMBER\" --repo \"${{ github.repository }}\" --body \"$body\"`."
+      },
+      {
+        "severity": "LOW",
+        "title": "Unquoted Variable in Shell Command",
+        "detail": "Claims $URL is used without quotes in `curl -fsS \"$URL/\"`, while conceding in the same sentence it is within double quotes."
+      }
+    ],
+    "grading": "Both findings are fabricated and falsifiable against the diff the agent was given. (1) MEDIUM: the added line is already `gh pr comment \"$PR_NUMBER\" --repo \"${{ github.repository }}\" --body \"$body\"` — $PR_NUMBER is quoted, and the recommended 'fix' is character-for-character identical to the existing code. Even unquoted there is no injection: it is a positional argument, not eval'd, and is an integer from github context. (2) LOW: $URL is quoted in `curl -fsS \"$URL/\"`; the finding contradicts itself, and the flagged line is unchanged *context* (the smoke loop), not part of this PR's change at all. The MEDIUM tripped FAIL_SEVERITIES (medium|high|critical) and blocked auto-merge on a correct, smoke-validated PR.",
+    "human_action": "False positive; PR is correct and smoke-passing. Harvested as judge-calibration data rather than appeasing the reviewer with a no-op re-quote."
+  },
+  "suite_note": "Security-review's first harvested false positive from the live @talos pipeline (PR #76). Failure signature: the diff-only reviewer hallucinates that already-quoted shell variables are unquoted and invents a command-injection vector — it does not ground its claims in the literal diff text it was handed (it even flags an unchanged context line). Mirrors code-review's convention-blindness FPs (cr-016, cr-005). FPR-half calibration data; graduates capability->regression when the false positive is fixed (e.g. stronger model and/or a prompt that requires quoting the exact offending substring from the diff)."
+}
