@@ -1,0 +1,7 @@
+[
+  {
+    "pattern": "DEP0169",
+    "reason": "Vercel runtime bridge deprecation warning on /api/healthz; known-benign, not app-fixable",
+    "ref": "https://github.com/darkin100/talos/issues/15"
+  }
+]

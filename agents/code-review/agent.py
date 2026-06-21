@@ -552,11 +552,17 @@ def main() -> int:
     # Pi (esp. a small model) occasionally ends a run without emitting the JSON
     # verdict. Retry a bounded number of times rather than crash-to-fail; a run
     # that never yields a verdict is treated as infra (skip), not a fail.
-    attempts = int(os.environ.get("REVIEW_MAX_ATTEMPTS", "2"))
+    # Pi/haiku sometimes ends a review without emitting the final JSON verdict;
+    # default to 3 attempts so a transient miss resolves rather than skips. A
+    # persistent miss still skips (below) — never a graded fail.
+    attempts = int(os.environ.get("REVIEW_MAX_ATTEMPTS", "3"))
     review = None
     for attempt in range(1, attempts + 1):
-        assistant_texts = run_pi_review(workspace, prompt, model, openrouter_key, tracer)
         try:
+            # Both a Pi run that emits nothing (transient API/rate-limit) and a
+            # run whose final message isn't parseable are "no verdict this try" —
+            # retry, and if it never resolves, skip (below). Never crash-to-fail.
+            assistant_texts = run_pi_review(workspace, prompt, model, openrouter_key, tracer)
             review = parse_verdict(assistant_texts)
             break
         except ValueError as exc:

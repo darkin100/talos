@@ -15,6 +15,9 @@ on:
       suite:
         description: "suite to run (regression | capability | all)"
         default: "regression"
+      trials:
+        description: "trials per task (strict-majority grading smooths noise)"
+        default: "3"
 
 permissions:
   contents: read
@@ -23,7 +26,9 @@ permissions:
 jobs:
   evals:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 3 trials/task × the Pi-driven code-review agent is the slow path; give it
+    # headroom over the old single-trial budget.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,8 +76,12 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
+          # --trials 3 + strict-majority grading smooths single-trial
+          # non-determinism (the agentic reviewer wobbles ~±20% on borderline
+          # cases — see EVAL_BACKLOG harness-failure log; TODO.md #5).
           python -m pytest evals -v \
             --suite "${{ github.event.inputs.suite || 'regression' }}" \
+            --trials "${{ github.event.inputs.trials || '3' }}" \
             ${{ steps.affected.outputs.args }}
 
       - name: Render report

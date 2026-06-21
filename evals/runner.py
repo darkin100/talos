@@ -213,38 +213,46 @@ def replay_review_agent(agent: str, task: Task, *, mode: str, model: str | None,
 
 
 def replay_code_review(task: Task, *, mode: str, model: str | None, timeout_s: int) -> Trial:
-    """code-review (Pi): give the agent the diff AND the code it touches.
+    """code-review (Pi): give the agent the diff AND the full code it reviewed.
 
-    The reviewer reads full files, so the replay must reconstruct the reviewed
-    state, not just hand over a diff. Copy todo-api, apply diff.patch so the
-    workspace is the PR-head (post-change) tree, then point Pi at it. The diff
-    is also passed via DIFF_FILE so the agent knows what changed.
+    The reviewer reads whole files, so the replay hands Pi the post-change tree.
+    Preferred: a frozen ``source/`` snapshot committed with the task — the exact
+    todo-api the reviewer saw, point-in-time, so the eval never expires as main
+    moves on (see docs/EVAL_BACKLOG.md). The diff is passed via DIFF_FILE so the
+    agent knows what changed.
+
+    Legacy fallback (no snapshot yet): copy the current todo-api and apply
+    diff.patch. This rots — once the diff stops applying the task must be
+    snapshotted (evals/scripts/capture_snapshot.sh). We skip rather than
+    mis-grade, since reviewing the unpatched tree fails real-defect tasks.
     """
     diff_file = task.path / "diff.patch"
     if not diff_file.exists():
         raise InfraFailure(f"{task.task_id}: no diff.patch in task dir (not hermetic yet)")
+    snapshot = task.path / "source"
 
     with tempfile.TemporaryDirectory(prefix="talos-eval-cr-") as tmp:
-        shutil.copytree(REPO_ROOT / "todo-api", Path(tmp) / "todo-api")
-        # Patches are repo-rooted (a/todo-api/...); apply from tmp where the
-        # copied tree sits at the same todo-api/ prefix to reach PR-head state.
-        apply = subprocess.run(
-            ["git", "apply", str(diff_file)],
-            cwd=tmp,
-            capture_output=True,
-            text=True,
-        )
-        if apply.returncode != 0:
-            # The stored diff no longer applies to the current todo-api (the
-            # base drifted). We can't reconstruct the reviewed post-change tree,
-            # and reviewing against the unpatched tree mis-grades real-defect
-            # tasks (the defect lives only in the diff, so the reviewer can't
-            # see it) — proven on cr-004. Skip honestly rather than guess; the
-            # task needs re-harvesting against current main or a pinned base SHA.
-            raise InfraFailure(
-                f"{task.task_id}: diff.patch no longer applies to current todo-api "
-                f"(stale fixture — re-harvest needed): {apply.stderr.strip()[:300]}"
+        if snapshot.is_dir():
+            # Frozen point-in-time tree: copy verbatim, no apply, no drift.
+            for child in snapshot.iterdir():
+                dest = Path(tmp) / child.name
+                shutil.copytree(child, dest) if child.is_dir() else shutil.copy2(child, dest)
+        else:
+            shutil.copytree(REPO_ROOT / "todo-api", Path(tmp) / "todo-api")
+            # Patches are repo-rooted (a/todo-api/...); apply from tmp where the
+            # copied tree sits at the same todo-api/ prefix to reach head state.
+            apply = subprocess.run(
+                ["git", "apply", str(diff_file)],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
             )
+            if apply.returncode != 0:
+                raise InfraFailure(
+                    f"{task.task_id}: no source/ snapshot and diff.patch no longer "
+                    f"applies to current todo-api — run evals/scripts/capture_snapshot.sh "
+                    f"to freeze this task: {apply.stderr.strip()[:200]}"
+                )
 
         env = {
             "DRY_RUN": "1",

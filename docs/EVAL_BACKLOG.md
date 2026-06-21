@@ -25,7 +25,7 @@ Harvested tasks live in `evals/datasets/<agent>/<task-id>/`:
 ```
 evals/datasets/
 ├── code/talos-bench-001/        # task.json: issue ref, base SHA, hidden test ref
-├── code-review/cr-001/          # task.json: PR ref, category label, expected verdict
+├── code-review/cr-001/          # task.json + diff.patch + source/ (frozen tree)
 ├── security-review/sec-001/     # task.json: PR ref, CWE, severity, expected findings
 ├── contract-test/mut-001/       # mutation.patch + expected violation
 ├── release-notes/rn-001/        # input (PR/commits) + reference.md (hand-edited)
@@ -34,6 +34,20 @@ evals/datasets/
 
 `task.json` always carries: `id`, `source` (issue/PR/branch URL), `label`
 (the ground truth), `created`, and `suite` (`capability` | `regression`).
+
+**Code-review tasks freeze a `source/` snapshot.** Because the code-review
+agent now reads full files (it drives Pi inside a checkout, not a bare diff),
+each `cr-*` task carries a point-in-time `source/<component>/...` tree — the
+exact code the reviewer saw — alongside `diff.patch`. The replay reviews the
+snapshot, so it never expires as `main` moves on (the failure that retired
+cr-001: its fix merged, so its diff became a no-op against current `todo-api`,
+and the recorded PR-head SHA was garbage-collected by the squash-merge).
+Capture with `evals/scripts/capture_snapshot.sh <task-dir> <mode>`:
+`current` (freeze base+diff from the working tree), `head <ref>` (a commit/
+branch whose tree already has the change), or `base <ref>` (archive the diff's
+base, then apply). Snapshot only the touched project component(s) (`todo-api`,
+`agents/<name>`, or a root file) — never the whole repo, which would recurse
+into `evals/`.
 
 ---
 
@@ -238,13 +252,33 @@ Observed 2026-06-20 while fixing the code-review false positives (cr-005, cr-016
      (bounded) and treats a persistent no-verdict as an **infra skip**, never a
      graded fail — a crash-to-fail on a clean PR would manufacture the very
      false positives this fix removes.
-   - *Workspace replay needs the diff to apply.* The hermetic replay rebuilds
-     the reviewed tree by applying `diff.patch` to current `todo-api`. Six older
-     fixtures (cr-001/002/003/004/005/009) were harvested against drifted bases
-     and no longer apply, so they now infra-skip. Reviewing them against the
-     unpatched tree was tried and **mis-graded a real defect** (cr-004 passed —
-     the defect lives only in the diff), so skipping is the honest behaviour.
-     Re-harvest against current main or pin a base SHA to restore coverage.
+   - *Workspace replay needs the diff to apply → fixtures now freeze a snapshot.*
+     The first cut rebuilt the reviewed tree by applying `diff.patch` to current
+     `todo-api`, which rots: six fixtures (cr-001/002/003/004/005/009) drifted
+     and no longer applied, and reviewing the unpatched tree **mis-graded a real
+     defect** (cr-004 passed — the defect lives only in the diff). Fixed
+     structurally: every `cr-*` task now carries a frozen `source/` snapshot of
+     the code it reviewed (see Dataset layout), so replay never depends on
+     current `main`. All 16 were back-filled with `capture_snapshot.sh`; cr-001
+     (whose PR-head SHA was GC'd by its squash-merge) is recoverable only because
+     the snapshot now lives in the fixture — the concrete argument for capturing
+     it at harvest time, not reconstructing from history later.
+   - *Precision fix traded against recall on subtle defects → capability.* The
+     code-access prompt ("ground every defect, don't flag what follows
+     convention") killed the false positives but made the agent too charitable
+     on subtle correctness flaws: cr-003/004 (rca suppression matching —
+     substring where anchored-regex is required) slipped through. A
+     correctness-scrutiny counterweight in the prompt ("convention covers style,
+     not whether the logic is right; trace matching/filtering against adversarial
+     inputs") raised the catch rate from ~0 to ~50% — caught on targeted reruns,
+     missed on the full-suite pass. ~50% is not a gate. Reclassified cr-003/004
+     regression→capability: reliable detection needs issue #33's anchored-regex
+     requirement, which the reviewer never sees, so they are the hill, not the
+     gate (same call as cr-002). Net: both known false positives (cr-005, cr-016)
+     fixed and stable, recall held on obvious defects, regression gate green;
+     subtle context-dependent defects logged as capability to climb (feed the
+     agent the issue requirement, or gate on trials-majority once catch rate is
+     high enough).
 
 Implication for the strategy: distinguish *infra/harness failure* from *agent
 failure* before computing pass rates; add timeouts + bounded-retry +
@@ -263,8 +297,12 @@ one agent's verdict never masks another's.
 1. One item at a time, through the real pipeline — the pipeline run *is* the
    data generation.
 2. Harvest immediately after each item closes (while ground truth is fresh):
-   write `task.json`, commit to `evals/datasets/`.
+   write `task.json`, commit to `evals/datasets/`. For code-review tasks, also
+   freeze the reviewed tree now — `capture_snapshot.sh <task-dir> head <pr-head>`
+   (or `current` before the diff drifts) — so the eval can't expire even after
+   the source SHA is garbage-collected.
 3. Seeded PRs are closed, never merged; their branches are kept (`eval-seed/*`)
-   so tasks are re-runnable from the SHA.
+   so tasks are re-runnable from the SHA. The `source/` snapshot is the durable
+   copy; the branch is a convenience that may be pruned.
 4. Every harvested task records which wave/track it came from, so suite
    balance (defect vs clean) is auditable.
