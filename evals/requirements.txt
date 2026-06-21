@@ -1,1 +1,2 @@
 pytest>=8
+rich>=13          # live eval progress dashboard (evals/_progress.py); TTY-only

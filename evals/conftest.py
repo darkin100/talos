@@ -61,6 +61,11 @@ def pytest_configure(config):
     RESULTS_DIR.mkdir(exist_ok=True)
     config._talos_results = []
 
+    # Live grouped dashboard for interactive runs; no-ops (default dots) in CI.
+    from _progress import TalosProgress
+
+    config.pluginmanager.register(TalosProgress(config), "talos-progress")
+
 
 def pytest_generate_tests(metafunc):
     if "task" not in metafunc.fixturenames:
