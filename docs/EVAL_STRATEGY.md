@@ -3,7 +3,7 @@
 This document defines the evaluation strategy for the six agents in the Talos SDLC and for the harness as a whole. Vocabulary follows [`docs/GLOSSARY.md`](./GLOSSARY.md), which in turn follows Anthropic's [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents). If a term here is unfamiliar, the glossary is the source of truth.
 ## 0. Executive summary
 
-For each of the six Talos agents (`code`, `code-review`, `security-review`, `contract-test`, `release-notes`, `rca`) we build two **eval suites**: a **regression suite** (~20 tasks) that runs on every PR that touches an agent at **trials/task = 3** with **strict-majority grading** (the runner's `--trials 3` default; a task passes only if a strict majority of its *graded* trials pass — an exact tie fails, and infra-failed trials are excluded, never counted against the agent), and a **capability suite** (~50 tasks, runs nightly, the hill we're climbing). Each task has **reference solutions** and is graded by a **code-based grader** (gate) plus a **model-based grader** (signal); human SMEs recalibrate the model-based grader quarterly.
+For each of the six Talos agents (`code`, `code-review`, `security-review`, `contract-test`, `release-notes`, `rca`) we build two **eval suites**: a **regression suite** (~20 tasks) that runs on every PR that touches an agent at **trials/task = 3** with **strict-majority grading** (the runner's `--trials 3` default; a task passes only if a strict majority of its *graded* trials pass — an exact tie fails, and infra-failed trials are excluded, never counted against the agent), and a **capability suite** (~50 tasks, runs nightly, the hill we're climbing). Each task has **reference solutions** and is graded by a **code-based grader** (gate) plus a **model-based grader** (signal); the maintainer re-grades a sample whenever a suite or the judge model changes (§3.5; at scale this becomes a quarterly SME recalibration of the model-based grader).
 
 Two numbers are reported everywhere, because they answer different questions: **pass@1** = the fraction of *individual* graded trials that passed (trial-level stability), and **majority pass@3** = the task-level outcome (a task passes if a strict majority of its 3 graded trials pass). The gate is the task-level majority pass@3; pass@1 is the variance check. Any threshold is stated in **units the suite size resolves**: on a suite of S tasks one task is worth `100/S` percentage points, so a regression suite of ~20 tasks moves in 5 pp steps and a threshold finer than one task (e.g. a literal "97%") cannot be expressed — actual per-suite sizes and their pp-per-task are given inline in each §2 gate.
 
@@ -71,8 +71,9 @@ These are direct applications of Anthropic's roadmap to Talos.
    "complete" suite.
 2. **Two grader types per agent.** A code-based grader (cheap, deterministic,
    the gate) plus a model-based grader (nuanced, calibrated against humans,
-   the signal). Human graders calibrate the model-based grader on a quarterly
-   cadence.
+   the signal). The maintainer re-grades a sample to calibrate the model-based
+   grader whenever a suite or the judge model changes (§3.5); at scale this
+   becomes a quarterly human-grader cadence.
 3. **Grade outcome, not path.** Anthropic's warning is direct: "We've found
    this approach too rigid… agents regularly find valid approaches that eval
    designers didn't anticipate." For Talos this means grade what the agent
@@ -80,7 +81,20 @@ These are direct applications of Anthropic's roadmap to Talos.
    not the tool-call sequence inside the trial.
 4. **Two judges from different model families.** Self-preference bias is the
    most-replicated failure mode in LLM-as-judge literature. Never use the
-   same model family for generator and grader.
+   same model family for generator and grader. The two judges gate by
+   **agreement-to-fail**: a task is only failed by the model-based grader when
+   *both* judges agree it failed. This is a deliberate, asymmetric choice — it
+   biases toward **false negatives (missing a real regression)** over **false
+   positives (failing a good change)**, on the principle that a model-based
+   *false* gate failure erodes trust in the harness faster than a quietly-missed
+   regression the code-based gate or downstream tests may still catch. **On
+   disagreement** (one judge fails, one passes) the task is **not** a gate
+   failure: it is passed for gating purposes but **flagged for maintainer review
+   and logged as a calibration sample** — the exact disagreements feed the
+   judge-agreement spot check (§3.4 weekly) and the re-grade-on-change mechanism
+   (§3.5 step 5). Disagreement rate is itself a drift signal: a rising split
+   means the judges have decalibrated and the model-based grader needs
+   re-baselining (§3.4 quarterly).
 5. **Capability suites graduate to regression suites — reliably means across
    trials, not a single lucky pass.** A capability task graduates to the
    regression suite once it passes **majority pass@3** (strict majority of its
@@ -104,6 +118,22 @@ These are direct applications of Anthropic's roadmap to Talos.
 > the table is the at-scale build the cut grows into. Read top-down for the
 > destination; read the bottom row for what runs green today.
 
+> **The at-scale counts are a target, not the repo's history — these suites are
+> synthetically seeded.** The cell counts below (100 historical PRs for
+> code-review, 30 PRs for release-notes, 20 resolved issues for Talos-bench,
+> 30 Juliet flows + 20 clean PRs for security, 10 incidents for RCA) are the
+> *scaled* suite sizes, not what this repo's history holds: the repo has only
+> 21 PRs and 3 issues (see [`docs/EVAL_BACKLOG.md`](./EVAL_BACKLOG.md)). The
+> suites are grown by **deliberate seeding** — labelled defects injected into
+> `todo-api` on fixture branches, with the clean halves drawn from real merges —
+> exactly the same mechanism as the contract-test mutation seeds (§2.4) and the
+> Juliet flows (§2.3) already described here. Seeded tasks are *better* for a
+> live demo than mined history: they are controllable, reproducible, and carry
+> known ground truth. The current on-disk suites (48 `task.json`, 43 replayable;
+> §0.1) were produced by the Wave-1 backlog in
+> [`docs/EVAL_BACKLOG.md`](./EVAL_BACKLOG.md); the per-agent cells here are where
+> those suites are headed at scale, not how many real PRs/issues exist today.
+
 Each agent gets the same six-field treatment:
 
 - **Task suite** — capability and regression, what the tasks look like
@@ -121,12 +151,12 @@ Each agent gets the same six-field treatment:
 | Task suite              | **Talos-bench**: 20 resolved issues from this repo, each with merged diff + the test suite at that SHA, runnable from a stable environment snapshot. Starts as a **capability suite**; tasks the agent solves reliably graduate to the regression suite. |
 | Outcome                 | The patch (diff) produced for the issue, plus pass/fail of the hidden test suite.                                                                                                                                                                        |
 | Code-based grader       | `tests_pass@1` on hidden tests (binary, primary), `cost_to_success` (Pi turns + tokens, threshold), file-overlap Jaccard vs merged diff (sanity, not gate)                                                                                               |
-| Model-based grader      | Pairwise comparison against the merged diff on (correctness, minimality, maintainability). Two graders from different families; only fail on agreement.                                                                                                  |
-| Human grader cadence    | Quarterly: SME re-grades 10 random trials to recalibrate the model-based grader.                                                                                                                                                                         |
-| Gate                    | Nightly only — per-PR uses real downstream tests. Run at trials/task = 3. Block prompt promotion if **pass@1** (trial-level) drops more than one suite-resolution step from the 30-day baseline — on the at-scale Talos-bench (20 tasks) that is > 5 pp = ≥ 2 tasks regressing, on the current 5-task cut (`code/capability`, 20 pp/task) that is ≥ 1 task — **OR** if **majority pass@3** (task-level) regresses on any task, OR `cost_to_success` rises > 50%. Report both pass@1 (fraction of all graded trials passing) and majority pass@3.                                                                                                  |
+| Model-based grader      | Pairwise comparison against the merged diff on (correctness, minimality, maintainability). Two graders from different families; **fail only on agreement** (disagreement → not a gate fail, flagged for maintainer review + logged as a calibration sample, per §1 principle 4 — biases toward missing regressions, by design).                                                                                                  |
+| Human grader cadence    | The maintainer re-grades a sample of trials whenever this suite or the judge model changes (the §3.5 harvest-and-label step). *At scale*: quarterly SME re-grade of 10 random trials to recalibrate the model-based grader.                                                                                                                                                                         |
+| Gate                    | Nightly only — per-PR uses real downstream tests. Run at trials/task = 3. Block prompt promotion if **pass@1** (trial-level) drops more than one suite-resolution step from the 30-day baseline — on the at-scale Talos-bench (20 tasks) that is > 5 pp = ≥ 2 tasks regressing, on the current 5-task cut (`code/capability`, 20 pp/task) that is ≥ 1 task — **OR** if **majority pass@3** (task-level) regresses on any task, OR `cost_to_success` rises > 50%. Report both pass@1 (fraction of all graded trials passing) and majority pass@3. SWE-bench Verified Lite is not part of this gate — it runs only on model/Pi changes as an external baseline (see the capability-baseline row).                                                                                                  |
 | Saturation watch        | Measured at trials/task = 3: when Talos-bench reaches ≥ 80% pass@1 (≥ 16/20 of the graded-trial total at the 20-task scale, resolvable in 5 pp/task steps; on the current 5-task cut that is ≥ 4/5, 20 pp/task), graduate each instance that individually passes **majority pass@3 on 3 consecutive nights** to regression, and seed harder tasks (multi-file, cross-cutting refactors).                                                                                                                   |
 | Online signal           | Existing `talos.code.run` span gets `eval.tests_pass` and `eval.judge_score` attached asynchronously by a Phoenix online evaluator after the PR merges.                                                                                                  |
-| Nightly capability eval | SWE-bench Verified Lite (50 instances) — wide-net regression detector.                                                                                                                                                                                   |
+| External capability baseline (on model/Pi change) | SWE-bench Verified Lite (50 instances) — **model-baseline check, run only when the underlying model or Pi version changes, not nightly.** It measures the model + Pi scaffold on *foreign* repos, so Talos prompt/harness changes barely move it (it is not a harness signal); and 50 agentic instances per run would on their own exceed the <$5/night nightly budget. Talos-bench (above) is the harness regression detector; SWE-bench is the external sanity baseline.                                                                                                                                                                                   |
 | **MVP first cut**       | 5 trivial fix-a-bug tasks from this repo's closed issues. One grader: `tests_pass@1`. Run nightly; surface pass rate in a single Phoenix dashboard tile.                                                                                                 |
 
 ### 2.2 Code-review agent
@@ -137,8 +167,8 @@ Each agent gets the same six-field treatment:
 | Task suite           | 100 historical PRs from this repo, each with a **reference solution**: the labelled `{real_defect, missing_test, maintainability, style_only, none}` category and the expected verdict. **Balanced problem set** — must include PRs where the agent *should not* find issues (style-only, trivial), or one-sided optimisation will follow. |
 | Outcome              | The PR comment posted (or not), plus the exit code (pass/fail).                                                                                                                                                                                                                                                                            |
 | Code-based grader    | Verdict match (assertion on outcome). Per-category precision/recall/F1 — never averaged, always reported per bucket (one of the explicit anti-patterns: single-number summaries hide regressions in critical categories). FPR on `style_only` PRs (trust-collapse indicator).                                                              |
-| Model-based grader   | A second LLM (different family) labels the agent's comment with one of the same categories; agreement required before flagging "fail".                                                                                                                                                                                                     |
-| Human grader cadence | Monthly: SME re-labels a 10% sample from production to refresh task suite (Anthropic Step 8 — keep the suite alive).                                                                                                                                                                                                                       |
+| Model-based grader   | A second LLM (different family) labels the agent's comment with one of the same categories; agreement required before flagging "fail" (disagreement → not a gate fail; flagged for maintainer review + logged as a calibration sample, per §1 principle 4 — the bias is toward missing regressions, by design).                                                                                                                                                                                                     |
+| Human grader cadence | The maintainer re-labels a sample whenever the suite or judge model changes (per §3.5). *At scale*: monthly SME re-label of a 10% production sample to keep the suite alive (Anthropic Step 8).                                                                                                                                                                                                                       |
 | Gate                 | Per-PR at trials/task = 3 (strict-majority verdict per PR, the workflow's `--trials 3` default): replay the regression suite and fail if any **per-category F1**, computed on the **majority pass@3** verdicts, drops by more than one bucket-resolution step vs main. State the per-bucket size and set the threshold to that step, not a finer 5 pp: at scale the 100-PR suite splits over 5 categories ≈ 20 PRs/bucket ≈ 5 pp granularity (and F1 combines precision and recall, so a single flip can move F1 ~5–10 pp); the current regression cut is 12 tasks (≈ 8 pp/task) split fewer ways, so a bucket step is coarser still. Also report **pass@1** verdict-match across all graded trials for stability. Never aggregate F1 across buckets. Nightly: replay [Martian code-review benchmark](https://github.com/withmartian/code-review-benchmark) for cross-tool comparability.                                                                                                                         |
 | Saturation watch     | Measured at trials/task = 3 on majority pass@3 verdicts: when **every in-scope category's** F1 reaches ≥ 0.90 — expressed to the bucket's resolution (~20 PRs/category ≈ 0.05 steps at scale, coarser on the current 12-task cut) — graduate and add harder tasks (multi-file PRs, subtle correctness bugs, race conditions). Never aggregate F1 across buckets for this trigger.                                                                                                                                                                                                                            |
 | Online signal        | **Override rate** — % of merger-overrode agent verdicts. Rises before F1 does.                                                                                                                                                                                                                                                             |
@@ -153,7 +183,7 @@ Each agent gets the same six-field treatment:
 | Outcome              | The PR comment with findings (severity, title, detail), plus exit code.                                                                                                                                                                                      |
 | Code-based grader    | **Per-CWE** precision/recall (never averaged), severity-weighted confusion matrix (medium/high/critical miscalls cost more), FPR on the clean half, suppression-list utilisation.                                                                            |
 | Model-based grader   | Independent security-tuned LLM grades severity calibration (was a "high" really high?). SARIF diff vs Snyk Code / Semgrep on identical PRs as an external cross-check.                                                                                       |
-| Human grader cadence | Quarterly: security SME re-grades severity on a 10-task sample.                                                                                                                                                                                              |
+| Human grader cadence | The maintainer re-grades severity on a sample whenever the suite or judge model changes. *At scale*: quarterly security-SME re-grade on a 10-task sample.                                                                                                                                                                                              |
 | Gate                 | At trials/task = 3 with strict-majority grading: block if any `high`/`critical` golden case fails its **majority pass@3** (truth missed in ≥ 2 of 3 graded trials) — a single flaky trial or one infra failure never trips the gate. Block if per-CWE recall, computed on majority pass@3 outcomes, falls below the threshold nearest 70% that the **bucket resolves**: with ~7–8 flows/CWE at scale the steps are 6/8 = 75% / 5/7 ≈ 71%, so set the gate at **< 71%** (≥ 1 missed flow in a 7-flow CWE); on the current 10-task regression cut (10 pp/task) state the equivalent per-task step. Also report per-CWE **pass@1** across all graded trials.                                                                                                                                                             |
 | Saturation watch     | Measured at trials/task = 3 on majority pass@3 outcomes: graduate when every in-scope CWE's F1 reaches the resolvable step at or above 0.85 — with ~7–8 flows/CWE that is effectively ≥ 6/7 caught (the exact 0.85 value is unreachable on a 7–8-flow bucket; round to the nearest step) — then add CWE categories (e.g. SSRF, deserialisation).                                                                                                                                                            |
 | Online signal        | Suppression-list utilisation — each new entry is a labelled example for the suite.                                                                                                                                                                           |
@@ -168,7 +198,7 @@ Each agent gets the same six-field treatment:
 | Outcome              | The set of generated tests and the violations they discovered.                                                                                                                                                                                                                                      |
 | Code-based grader    | **Mutation kill rate** (the headline grader — coverage without kill = tests don't assert). Schema validity % of generated requests. Operation / status-code coverage. Schemathesis-relative catch rate (caught ≥ X% of what Schemathesis caught).                                                   |
 | Model-based grader   | Used only for **triage** (summarising violations into a GitHub issue body) — not for the pass/fail decision. The oracles are formal.                                                                                                                                                                |
-| Human grader cadence | Per spec change: SME reviews the mutation seed set for relevance.                                                                                                                                                                                                                                   |
+| Human grader cadence | The maintainer reviews the mutation seed set whenever the spec or seeds change. *At scale*: a dedicated SME review per spec change.                                                                                                                                                                                                                                   |
 | Gate                 | At trials/task = 3 (a seed counts as **killed** only if killed in a strict majority of its 3 graded trials): block if mutation kill rate < 70%. With 10 seeds the rate resolves in 10 pp steps and 70% sits exactly on a step, so set the gate explicitly at **≤ 6/10 killed = block** (kill rate must be ≥ 7/10 to pass); on the current 4-seed regression cut (25 pp/seed) state the equivalent ≥ 3/4 step. Report **pass@1** kill rate (across all graded trials) alongside the majority pass@3 per-seed result. Schema validity is a per-request rate (large N), so 95% is resolvable as-is = block.                                                                                                                                                                                    |
 | Saturation watch     | Measured at trials/task = 3 on per-seed majority pass@3 outcomes: when kill rate ≥ 9/10 (90%, the resolvable step on 10 seeds at scale; ≥ 4/4 on the current 4-seed cut), add harder mutants (semantic-preserving edits, mutation cascades).                                                                                                                                                                                                   |
 | Online signal        | The "LLM-too-narrow-on-status-codes" tolerance fired in `agent.py:350-363` is the acknowledged eval-cheating surface — instrument *how often* it fires. Rising = prompt or spec drift.                                                                                                              |
@@ -183,7 +213,7 @@ Each agent gets the same six-field treatment:
 | Outcome              | The generated markdown release note.                                                                                                                                                                                                |
 | Code-based grader    | Length constraint (≤ 300 words, hard rule). Claim-grounding check: each atomic claim in the note must map to a commit / PR field via string-overlap heuristics (first pass).                                                        |
 | Model-based grader   | **Faithfulness** ([RAGAS](https://docs.ragas.io/)-style: atomic claim → entailment judgement against the diff). **Hallucination rate**: % of notes with ≥ 1 ungrounded claim. Pairwise readability vs the hand-edited reference.    |
-| Human grader cadence | Monthly: SME labels a 10% sample of production release notes for the model-based grader to recalibrate against.                                                                                                                     |
+| Human grader cadence | The maintainer re-grades a sample whenever the suite or judge model changes (per §3.5). *At scale*: monthly SME label of a 10% production-release-note sample for the model-based grader to recalibrate against. (Note: a solo maintainer's 10% monthly ≈ two notes — too few to recalibrate, which is why this is the at-scale pattern, not today's mechanism.)                                                                                                                     |
 | Gate                 | At trials/task = 3 with strict-majority grading: block if any regression task produces a hallucinated claim in a strict majority of its 3 graded trials (**majority pass@3** fail) — one flaky generation never trips the gate. Also report **pass@1** hallucination rate = fraction of all graded trials with ≥ 1 ungrounded claim; on the at-scale 30-task suite the task-level rate resolves to 3.3 pp/task steps, on the current 5-task cut to 20 pp/task. **Not a gate**: ROUGE / BLEU — Anthropic's principle that "failures should seem fair" is violated when surface-level n-gram overlap rejects valid rewordings. |
 | Saturation watch     | Measured at trials/task = 3: graduate when the **trial-level** hallucination rate is 0 (no ungrounded claim in *any* graded trial), which is stricter than 0 majority pass@3 failures — recommend requiring the trial-level 0. Then add adversarial tasks (PRs with misleading titles, fixup commits, no-op renames).                                                                                              |
 | Online signal        | 10% of production release notes routed to human label queue monthly; new failures become regression tasks.                                                                                                                          |
@@ -198,7 +228,7 @@ Each agent gets the same six-field treatment:
 | Outcome              | The GitHub issue body the agent posts (title + diagnosis + cited evidence), plus the exit code.                                                                                                                                                                                                                                                                      |
 | Code-based grader    | **Top-3 hypothesis accuracy** — was the truth in the agent's top 3? (RCA is rarely deterministic — one of Anthropic's grader-design principles.) **Evidence-citation rate** — % of hypotheses citing a specific `file:line` or log entry. **Cost-to-cause** — tokens / trials until correct. **FPR on clean logs** — must not raise issues when there are no errors. |
 | Model-based grader   | Independent LLM grades whether the issue body's diagnosis matches the labelled cause. Given an explicit "Unknown" exit (Anthropic's recommendation to "give the LLM a way out").                                                                                                                                                                                     |
-| Human grader cadence | When an RCA issue is closed in production, the closer labels `diagnosis_correct: y/n`. Forms the online flywheel.                                                                                                                                                                                                                                                    |
+| Human grader cadence | When an RCA issue is closed, the maintainer/closer labels `diagnosis_correct: y/n` — the online flywheel, and the same re-grade-on-change sample (per §3.5). *At scale*: this becomes a standing closer-labelling rotation.                                                                                                                                                                                                                                                    |
 | Gate                 | At trials/task = 3 (a task counts correct if the truth is in the top-3 in a strict majority of its 3 trials): block if **top-3 majority pass@3 accuracy < 60%**. With 10 replay tasks at scale the rate resolves in 10 pp steps and 60% sits on a step, so set the gate at **≤ 5/10 = block** (pass needs ≥ 6/10); on the current 6-task regression cut (17 pp/task) state the equivalent ≤ 3/6 step. For clean logs, FPR > 5% is unreachable on a tiny clean set (one false incident on 2 clean logs is 50%, on 10 is 10%): the gate is **0 false incidents at the clean-set's resolution** — block if any clean-log task raises an issue in a strict majority of its 3 trials. State K (the clean-log count); the smallest non-zero FPR is 1/K, so gate at any majority-pass@3 false positive rather than an unreachable 5%. Report top-3 **pass@1** across all graded trials too. (False incidents destroy trust faster than missed ones — note the asymmetry per **balanced problem sets**.)                                                                                                                                                                               |
 | Saturation watch     | Measured at trials/task = 3 on per-task majority pass@3 top-1 outcomes: graduate when top-1 accuracy ≥ 8/10 (80%, the resolvable step on 10 tasks at scale; ≥ 5/6 on the current 6-task cut), then add harder tasks (multi-cause incidents, latent bugs that surface days after deploy).                                                                                                                                                                                                                             |
 | Online signal        | Time-from-deploy to correct-hypothesis on live incidents (when `diagnosis_correct=y`).                                                                                                                                                                                                                                                                               |
@@ -227,14 +257,19 @@ that AI-generated code lifts deployment frequency while CFR quietly grows.
 
 ### 3.2 Harness-specific cross-cutting metrics
 
-| Metric               | Definition                                                                             | Why                                                 |
-| -------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **Gate escape rate** | Merged PRs that later triggered RCA or contract-test, % passed by code/security review | Each escape = a new regression-suite task           |
-| **Override rate**    | % of agent verdicts a human overrode                                                   | Leading indicator of trust collapse                 |
-| **Cost per PR**      | Total OpenRouter $ across all six agents end-to-end                                    | ROI denominator                                     |
-| **Stage cycle time** | Wall-clock per agent                                                                   | Bottleneck finder                                   |
-| **Trust-cost ratio** | (1 − override_rate) / cost_per_PR                                                      | Single demoable harness-quality number              |
-| **Harness drift**    | Per-agent regression score — defined as **majority pass@3** (task-level, trials/task = 3) — moving > 2σ from the 30-day rolling baseline, with the band **floored at the suite's one-task resolution** (5 pp on a 20-task suite, 10 pp on a 10-task suite, etc.) so a single-task flip isn't mistaken for drift; track pass@1 variance separately | Catches silent model swaps, prompt edits, dep bumps |
+The per-PR trace tree (§3.3) and the metrics marked *demoable now* below work
+from day one; the *needs-scale* metrics depend on human reviewers and deploy
+volume the live demo lacks, so the dashboard story must not promise those panels
+on stage.
+
+| Metric               | Definition                                                                             | Demoable now? | Why                                                 |
+| -------------------- | -------------------------------------------------------------------------------------- | ------------- | --------------------------------------------------- |
+| **Gate escape rate** | Merged PRs that later triggered RCA or contract-test, % passed by code/security review | Needs scale — requires deploy volume + RCA/contract-test issue history the single-maintainer demo won't have. | Each escape = a new regression-suite task           |
+| **Override rate**    | % of agent verdicts a human overrode                                                   | Needs scale — requires a human reviewer overriding agent verdicts at volume; no override stream today. | Leading indicator of trust collapse                 |
+| **Cost per PR**      | Total OpenRouter $ across all six agents end-to-end                                    | Demoable now — OpenRouter $ is captured per run from day one. | ROI denominator                                     |
+| **Stage cycle time** | Wall-clock per agent                                                                   | Demoable now — wall-clock per agent comes straight from the span tree. | Bottleneck finder                                   |
+| **Trust-cost ratio** | (1 − override_rate) / cost_per_PR                                                      | Partly — the cost half is demoable now; the (1 − override_rate) half inherits Override rate's needs-scale gap, so the standing tile (§0.1) shows cost today and fills in trust as overrides accrue. | Single demoable harness-quality number              |
+| **Harness drift**    | Per-agent regression score — defined as **majority pass@3** (task-level, trials/task = 3) — moving > 2σ from the 30-day rolling baseline, with the band **floored at the suite's one-task resolution** (5 pp on a 20-task suite, 10 pp on a 10-task suite, etc.) so a single-task flip isn't mistaken for drift; track pass@1 variance separately | Needs scale — needs a 30-day rolling baseline of nightly regression scores (the nightly schedule itself is the §4.1 not-yet-wired gap). | Catches silent model swaps, prompt edits, dep bumps |
 
 ### 3.3 Trace substrate (Arize AX / Phoenix)
 
@@ -244,9 +279,17 @@ Already there — every agent emits OpenInference spans to **Arize AX**
 `talos.<agent>.run` (kind `AGENT`) carrying `input.value` / `output.value` as
 JSON plus `session.id`, `metadata`, and the propagated `pr_number`. The sketch
 below is written against Phoenix's evaluator API; the same wiring runs on Arize
-AX's online-evals surface. **Either way it must be pinned to a tested SDK
-version or labelled pseudocode** (TODO.md #6) — treat the snippet as the shape,
-not a tested call.
+AX's online-evals surface. **The code block below is illustrative pseudocode, not a tested call**
+(TODO.md #6) — read it as the shape of an online evaluator, not a
+copy-pasteable API. The surrounding Arize surface *is* pinned: the export and
+dataset-experiment calls used in §3.5 are confirmed against real SDKs
+(`arize.exporter.ArizeExportClient.export_model_to_df`, SDK ≥ 7.0.3;
+`arize.experimental.datasets.ArizeDatasetsClient.create_dataset` /
+`run_experiment`). The one call that remains unpinned is the **online-evaluator
+registration** itself (`Client().evaluators.register(...)` below): Phoenix's
+documented evaluation surface is the `phoenix.experiments` / evals library
+(e.g. `run_experiment`), so treat the `register(...)` line as the intended shape
+pending a pin to a tested Phoenix version.
 
 - **Trace tree per PR**: propagate `pr_number` as a span attribute so the full
   agent chain (code → code-review → security-review → contract-test → rca)
@@ -259,7 +302,7 @@ not a tested call.
   posts a diff comment to the PR.
 
 Sketch of an online evaluator for `code-review` — scores the agent's
-comment against the eventually-merged diff, post-hoc:
+comment against the eventually-merged diff, post-hoc (pseudocode — illustrative, not a tested call):
 
 ```python
 from phoenix.evals import create_evaluator
@@ -279,6 +322,7 @@ def grade_review(output: dict, expected: dict) -> dict:
             "label": judgement.get("reason", "")}
 
 Client().evaluators.register(
+    # PSEUDOCODE: shape only — pin to a tested Phoenix/Arize online-evals API
     project="talos-code-review",
     evaluator=grade_review,
     sample_rate=1.0,  # score every span; drop to 0.1 if cost matters
@@ -294,10 +338,11 @@ oranges.
 | Cadence                                              | What runs                                                                   | Budget       |
 | ---------------------------------------------------- | --------------------------------------------------------------------------- | ------------ |
 | Per PR (only if `agents/**` touched) | Regression suite for affected agent at trials/task = 3 (strict-majority grading, the workflow's `--trials 3` default); gate on majority pass@3 (task-level) and additionally report pass@1 (trial-level) in the PR comment; schema/lint of agent outputs | < $0.10 / PR |
-| Nightly                                              | Capability suites, mutation sweep, SWE-bench Verified Lite, OWASP Benchmark | < $5 / night |
+| Nightly                                              | Capability suites, mutation sweep, OWASP Benchmark | < $5 / night (six capability suites + the mutation sweep + OWASP Benchmark; SWE-bench removed because 50 nightly agentic runs alone would blow this figure) |
 | Weekly                                               | Drift dashboard review, judge-agreement spot check                          | manual       |
-| Monthly                                              | Human label of 10% production sample → suite refresh                        | ~2 hrs human |
-| Quarterly                                            | Rotate judge model family; re-baseline against human grader                 | ~½ day SME   |
+| Monthly *(at scale)*                                 | Human label of 10% production sample → suite refresh (today: maintainer re-grades a sample only when a suite or the judge model changes, per §3.5) | ~2 hrs human |
+| Quarterly *(at scale)*                               | Rotate judge model family; re-baseline against human grader                 | ~½ day SME   |
+| On model / Pi version change                         | SWE-bench Verified Lite (external model-baseline, not a harness signal)      | one-off run; ~$ per agentic run, kept off the nightly budget |
 
 ### 3.5 Harvesting Arize AX traces into eval datasets
 
@@ -408,7 +453,7 @@ packaging gaps (the missing-`COPY` class of bug, harness-failure log #5).
 | 0 — Scaffolding ✅       | 1     | **Done.** `evals/` runner + graders + CI workflow on `agents/**`; six MVP cuts populated and green. Tooling: **plain pytest** for CI gates (DeepEval dropped); Phoenix deferred until agents trace to it |
 | 1 — Review agents        | 2     | 100 labelled PRs (code-review reference solutions), 30 Juliet flows (security-review), per-PR per-category F1 diff comment on PRs                                           |
 | 2 — Formal-oracle agents | 2     | 30 release-note reference solutions + RAGAS faithfulness scorer; Schemathesis baseline + 10 mutation seeds for contract-test                                                |
-| 3 — Generative agents    | 2     | Talos-bench (20 instances), 10 RCA replay tasks with bundled log + source state, SWE-bench Verified Lite wired into nightly                                                 |
+| 3 — Generative agents    | 2     | Talos-bench (20 instances), 10 RCA replay tasks with bundled log + source state, SWE-bench Verified Lite wired as an on-model/Pi-change external baseline (not nightly)                                                 |
 | 4 — SDLC dashboard       | 1     | DORA-with-AI dashboard (Phoenix or Vercel page), drift alerts, per-PR eval report — the talk's punchline view                                                               |
 
 ## 4.1 Closing the loop: the harness-improvement experiment
@@ -471,16 +516,16 @@ Direct mapping from Anthropic's anti-patterns to Talos design decisions:
 
 | Anthropic anti-pattern                | Talos counter                                                                                                                                         |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Task ambiguity                        | Every regression task includes a reference solution; tasks reviewed by two SMEs before entering the suite                                             |
+| Task ambiguity                        | Every regression task includes a reference solution; the maintainer checks each task against it before it enters the suite (two-SME review is the *at-scale* pattern)                                             |
 | Over-specification (grading the path) | Graders score the artefact (comment, issue, patch, note) — never the tool-call sequence inside the trial                                              |
 | One-sided evals                       | Each suite is balanced: review/security have clean PRs in the suite, RCA has clean logs, release-notes has fixup-only PRs                             |
 | Insufficient environment isolation    | Each agent trial starts from a `git checkout` of the SHA + a fresh Docker container — no shared state between trials                                  |
-| Grading bugs                          | String matches use fuzzy/numeric tolerance; LLM graders given an "Unknown" exit; humans recalibrate quarterly                                         |
+| Grading bugs                          | String matches use fuzzy/numeric tolerance; LLM graders given an "Unknown" exit; the maintainer recalibrates whenever the suite or judge model changes (quarterly SME recalibration is the *at-scale* pattern)                                         |
 | Goal mismatch                         | Graders are reviewed against the agent's system prompt every time the prompt changes                                                                  |
 | Eval cheating                         | Code-based graders verify outcomes that the agent can't see in the prompt (hidden tests, mutation seeds on a private branch, post-merge verification) |
 | Single-number summaries               | Per-category F1 for review agents; per-CWE for security; never aggregate over buckets                                                                 |
 | Self-preference bias                  | Generator and judge always come from different model families                                                                                         |
-| Stale suites                          | 10% monthly rotation from production sample; quarterly human re-grading                                                                               |
+| Stale suites                          | Suite refreshed from harvested production traces (§3.5) when it or the judge model changes (10% monthly rotation + quarterly human re-grading is the *at-scale* pattern)                                                                               |
 | Trajectory blindness                  | Cost-to-success / cost-to-cause are first-class gated metrics, not just success rate                                                                  |
 | Benchmark contamination               | Talos-bench draws from this repo's private history; SWE-bench Verified Lite is held out from prompt-tuning                                            |
 
