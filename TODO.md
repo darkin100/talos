@@ -20,11 +20,19 @@ item at a time; tick when the doc (or repo) reflects the change.
   Seeded tasks are also better for a live demo: controllable, reproducible,
   known ground truth.
 
-- [ ] **2. Invert the structure: demo path first, scale path second.** The MVP
-  cuts are buried as the last row of six tables and the dashboard ("the talk's
-  punchline") is Phase 4 of an ~8-week plan. Restructure so Phase 0 = the six
-  MVP cuts + per-PR diff comment + one dashboard tile (that IS the demo), and
-  the full per-agent builds become a "what this looks like at scale" roadmap.
+- [x] **2. Invert the structure: demo path first, scale path second.**
+  *(Done 2026-06-21.)* The MVP cuts were buried as the last row of six §2 tables
+  and the dashboard ("the talk's punchline") was Phase 4 of an ~8-week plan.
+  Added [EVAL_STRATEGY.md §0.1 "The demo, built today"](docs/EVAL_STRATEGY.md)
+  right after the executive summary: it collects the six MVP first cuts into one
+  table, names the three demo ingredients (six cuts + per-PR eval comment via
+  `report.py`/`talos-evals.yml` + one dashboard tile), grounds each in real repo
+  paths, and flags the standing dashboard tile as the one remaining demo piece
+  (only `evals/_progress.py`, a TTY-only panel, exists). Recast §2 (now "Per-agent
+  strategy (what this looks like at scale)") and §4 (now "Implementation phases
+  (the scale-up roadmap)") with lead blockquotes marking them as the roadmap
+  beyond the demo; all original content (the six per-agent tables incl. their MVP
+  first-cut rows, and the 5-phase plan) preserved.
 
 - [ ] **3. Replace human-grader cadences with what one maintainer can do.**
   Quarterly SME recalibration, monthly 10% production labelling, "two SMEs per
@@ -114,8 +122,15 @@ item at a time; tick when the doc (or repo) reflects the change.
 
 ## Framing
 
-- [ ] **11. Add a section that closes the loop on the exam question.** Show the
-  *experiment* that claims "the harness improved": a prompt change lands → the
-  per-PR diff comment shows regression deltas → the nightly capability curve
-  moves → the DORA throughput/quality pairing stays healthy. That narrative
-  arc is the talk's actual punchline; right now it's implied, not written.
+- [x] **11. Add a section that closes the loop on the exam question.**
+  *(Done 2026-06-21.)* Added [EVAL_STRATEGY.md §4.1 "Closing the loop: the
+  harness-improvement experiment"](docs/EVAL_STRATEGY.md), a dedicated four-beat
+  arc: a prompt change lands on an agent → the per-PR eval comment shows
+  trials-aware per-category regression deltas (pass@1 trial-level + majority
+  pass@3 task-level, per TODO #5) → the nightly capability curve moves (fed by
+  the §3.5 Arize-harvest flywheel) → the DORA throughput/quality pairing (§3.1)
+  stays healthy (throughput up without CFR creeping; harness-drift §3.2 as the
+  alarm). Grounded in real artifacts (`talos-evals.yml`, `report.py`) and honest
+  about the two not-yet-built gaps (the baseline delta in the comment, the
+  nightly cron). Ends by naming the arc the talk's punchline (dark factory built
+  AND its improvement measured); §0 now points to it.

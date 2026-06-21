@@ -13,7 +13,54 @@ Above the per-agent layer, the harness is graded by **DORA + AI caveats** (deplo
 
 The whole thing rides on a trace store — **Arize AX** today (Phoenix is the API-compatible OSS equivalent): every agent's existing OpenInference span tree *is* the **transcript**. Online evaluators score those spans post-hoc; captured production flows are harvested back into dataset tasks (§3.5); dataset experiments re-run suites on prompt changes and post a diff to the PR.
 
-**Minimum viable cut to demo this**: 5 tasks per agent + 1 code-based grader each + a per-PR comment showing pass/fail vs main. Everything else is incremental on that.
+**Minimum viable cut to demo this**: 5 tasks per agent + 1 code-based grader each + a per-PR comment showing pass/fail vs main. Everything else is incremental on that. That cut is **built and runs green today** — see §0.1. And the experiment that answers the exam question end-to-end (a prompt change → per-PR regression deltas → nightly curve → DORA pairing) is written up as the close-the-loop arc in §4.1.
+
+## 0.1 The demo, built today
+
+This is the thing being demoed on stage — not a plan, a running pipeline. The
+demo is exactly three ingredients, and the first two exist in the repo now:
+
+1. **Six MVP first cuts** — one small, code-graded task set per agent
+   (collected in the table below), populated in
+   [`evals/datasets/`](../evals/datasets/) and replaying green.
+2. **The per-PR eval comment** — a prompt change touching `agents/**` (or
+   `evals/**`) triggers [`.github/workflows/talos-evals.yml`](../.github/workflows/talos-evals.yml),
+   which runs the affected suite at `--trials 3`, renders
+   [`evals/report.py`](../evals/report.py), and posts a single sticky comment
+   (marker `<!-- talos:evals -->`) with per-category, trials-aware results.
+3. **One dashboard tile** — the single demoable harness-quality number
+   (**trust-cost ratio**, §3.2) surfaced as a standing tile. This is the **one
+   remaining demo piece**: today the only dashboard is
+   [`evals/_progress.py`](../evals/_progress.py), a TTY-only live progress panel
+   for interactive pytest runs (it renders nothing in CI). A hosted/standing
+   tile is not yet built.
+
+The six MVP first cuts, collected in one place (each is also the bottom row of
+its per-agent §2 table, where it sits against the at-scale build):
+
+| Agent             | MVP first cut                                                                                                                  | One grader                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Code (§2.1)       | 5 trivial fix-a-bug tasks from this repo's closed issues. Run nightly; surface pass rate in a single dashboard tile.          | `tests_pass@1`                              |
+| Code-review (§2.2)| 10 labelled PRs (5 with real defects, 5 style-only). Per-PR comment shows the diff vs main on these 10.                        | verdict match                               |
+| Security (§2.3)   | 5 Juliet flows (one per CWE in scope) + 5 clean PRs.                                                                          | per-CWE recall ≥ 1 and clean-PR FPR = 0     |
+| Contract-test (§2.4)| 3 mutation seeds (one obvious wrong-status, one schema break, one missing-field).                                           | mutation kill rate                          |
+| Release-notes (§2.5)| 5 historical PRs + hand-edited reference notes.                                                                             | hallucination rate (claim not in `git log` → fail) |
+| RCA (§2.6)        | 3 replay tasks (one seeded bug + 2 incidents from this repo's history) + 2 clean-log runs.                                    | top-3 accuracy + FPR = 0 on clean           |
+
+**What actually ships today vs. the cuts above.** The repo has grown past the
+literal "5 per agent" cut: `evals/datasets/` holds 48 `task.json` (43 replayable
+by the runner; the 5 `code`/talos-bench tasks have no replayer and run in the
+nightly harness), split code-review 16, security-review 12, rca 6,
+release-notes 5, contract-test 4, code 5. The plain-pytest runner
+([`evals/runner.py`](../evals/runner.py)), code-based graders
+([`evals/graders.py`](../evals/graders.py)), pytest wiring
+([`evals/conftest.py`](../evals/conftest.py),
+[`evals/test_regression.py`](../evals/test_regression.py)), trials-aware report
+([`evals/report.py`](../evals/report.py)) and the per-PR workflow all run green;
+a sample [`evals/.results/results.json`](../evals/.results/results.json) is
+checked in as proof. The `--suite capability` split (11 tasks tagged
+`capability`) is runnable on demand. **Everything in §2 and §4 below is the
+scale-up path beyond this demo, not the demo itself.**
 
 ## 1. Design principles
 
@@ -49,7 +96,13 @@ These are direct applications of Anthropic's roadmap to Talos.
    those spans post-hoc; captured flows are harvested into dataset tasks
    (§3.5); dataset experiments re-run task suites on prompt changes.
 
-## 2. Per-agent strategy
+## 2. Per-agent strategy (what this looks like at scale)
+
+> **This section is the roadmap beyond the demo, not the demo.** The live demo
+> is the collected six MVP first cuts in §0.1. Each table below ends with that
+> agent's **MVP first cut** row (the built-today slice); everything above it in
+> the table is the at-scale build the cut grows into. Read top-down for the
+> destination; read the bottom row for what runs green today.
 
 Each agent gets the same six-field treatment:
 
@@ -330,7 +383,14 @@ dataset-experiment idea and the natural home for the **model-based
 (LLM-as-judge)** grader and the nightly capability curve. Split of duties: gate
 on the committed pytest suite; trend and judge in Arize.
 
-## 4. Implementation phases
+## 4. Implementation phases (the scale-up roadmap)
+
+> **Phase 0 IS the demo (§0.1) and it is already built.** Phases 1–4 below are
+> the "what this looks like at scale" roadmap — the path from the running demo to
+> the full per-agent suites in §2. The dashboard that the talk treats as its
+> punchline view is broken out separately as Phase 4 here, but its *narrative*
+> — the close-the-loop experiment — is written up front in §4.1, because that
+> arc, not the multi-week plan, is what the talk demonstrates.
 
 **Phase 0 is built** (2026-06-11). `evals/` holds a plain-pytest runner +
 code-based graders + a per-PR CI workflow (`.github/workflows/talos-evals.yml`,
@@ -350,6 +410,60 @@ packaging gaps (the missing-`COPY` class of bug, harness-failure log #5).
 | 2 — Formal-oracle agents | 2     | 30 release-note reference solutions + RAGAS faithfulness scorer; Schemathesis baseline + 10 mutation seeds for contract-test                                                |
 | 3 — Generative agents    | 2     | Talos-bench (20 instances), 10 RCA replay tasks with bundled log + source state, SWE-bench Verified Lite wired into nightly                                                 |
 | 4 — SDLC dashboard       | 1     | DORA-with-AI dashboard (Phoenix or Vercel page), drift alerts, per-PR eval report — the talk's punchline view                                                               |
+
+## 4.1 Closing the loop: the harness-improvement experiment
+
+The exam question this whole repo answers is: **"can I build a dark factory AND
+measure harness improvements?"** Phase 0 (§0.1) proves the *build*. This section
+is the *measure* — the concrete experiment the talk runs on stage to show the
+harness got better, not just that it exists. It is one arc with four beats, each
+riding a real artifact:
+
+1. **A prompt change lands on an agent.** The maintainer edits, say,
+   `agents/code-review/`'s system prompt and opens a PR. Because the PR touches
+   `agents/**`, [`.github/workflows/talos-evals.yml`](../.github/workflows/talos-evals.yml)
+   fires automatically, detects the affected agent, and replays its regression
+   suite at `--trials 3`.
+
+2. **The per-PR eval comment shows per-category regression deltas, trials-aware.**
+   [`evals/report.py`](../evals/report.py) renders the run as a per-category
+   table and posts it as the sticky `<!-- talos:evals -->` comment. It reports
+   the two numbers §0/§1 insist on: **pass@1** (trial-level, the variance check)
+   and **majority pass@3** (task-level, the gate), per category, never a single
+   aggregate. *Gap to close for the full demo:* `report.py` today renders the
+   current run's table; the **delta vs the main baseline** is not yet computed in
+   the comment (see TODO #11 / not-built). The dual-grader comparison §3.3
+   guarantees the delta is apples-to-apples — the **same grader** runs on main
+   and on the PR — so when the delta lands it is a true regression signal, not
+   grader drift.
+
+3. **The nightly capability curve moves.** The capability suite (`--suite
+   capability`, 11 tasks tagged today) is the hill being climbed; a genuine
+   prompt improvement shows up as the curve ticking up over consecutive nights,
+   in the 2 pp/task increments the suite size resolves (§0). *Gap to close:* the
+   nightly schedule itself is not yet wired (no `schedule:`/cron workflow exists;
+   the suite is runnable on demand but nothing plots a curve over time). Tasks
+   that climb reliably graduate capability → regression by the principle-5 rule
+   (sustained majority pass@3 across nights), and the §3.5 Arize-harvest flywheel
+   keeps feeding the hill fresh, real, production-sourced tasks — overrides and
+   false positives first — so the curve never saturates on a stale suite.
+
+4. **The DORA throughput/quality pairing stays healthy.** The prompt change is
+   only an *improvement* if throughput rises **without** quality slipping. Per
+   the §3.1 critical pairing, deployment frequency / lead time are never read
+   without change-failure-rate / gate-escape-rate on the same chart — exactly the
+   trap the 2025 DORA report names (AI lifts deploy frequency while CFR quietly
+   grows). The **harness drift** metric (§3.2) is the alarm: a per-agent majority
+   pass@3 moving > 2σ from the 30-day baseline (floored at one-task resolution)
+   flags a silent regression even when the per-PR gate passed.
+
+Read end to end, the arc is: *prompt change → per-PR trials-aware regression
+deltas → nightly capability curve climbs → DORA throughput up with CFR flat.*
+That is the talk's actual punchline — **the dark factory is built (§0.1) AND its
+improvement is measured.** The arc is wired except for the two gaps flagged
+above (the baseline delta in the PR comment, and the nightly curve schedule);
+the per-PR comment, the trials-aware report, the harvest flywheel, and the drift
+metric all exist today.
 
 ## 5. Anti-patterns explicitly avoided
 
