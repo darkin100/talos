@@ -1,0 +1,33 @@
+{
+  "id": "cr-016",
+  "suite": "regression",
+  "agent": "code-review",
+  "track": "wave1 (organic — high-value false positive, F1 live pipeline)",
+  "created": "2026-06-20",
+  "source": "https://github.com/darkin100/talos/pull/71",
+  "issue": "https://github.com/darkin100/talos/issues/70",
+  "diff_sha": "8d466d5e082e8ec6a48c1c646eecb7dd910a61b8",
+  "label": {
+    "category": "none",
+    "expected_verdict": "PASS",
+    "rationale": "Correct, minimal organic implementation of F1 (GET /api/todos?completed=true|false). Filter direction is literal (completed=true returns completed todos), invalid values return 400, no param returns all, openapi.yaml documents the param plus the 400. Handler-level tests pass 16/16 locally, covering all four branches. A good reviewer passes it."
+  },
+  "reference_trial": {
+    "date": "2026-06-20",
+    "model": "anthropic/claude-haiku-4.5",
+    "verdict": "FAIL (FALSE POSITIVE)",
+    "output_file": "trial-2026-06-20.md",
+    "diff": "diff.patch",
+    "grading": "Hallucinated defect, blocked correct work. Two fabricated claims, both falsifiable against the diff and the codebase: (1) \"return 400 should be return; returning a numeric status from a handler is incorrect\" — false, every handler in handler.js returns a numeric status (lines 21, 24, 30, 37, 42, 45, ...) which the dispatcher captures as `status = handleTodos(req, res)`; the added `return 400;` is identical to the `return 400;` directly below it. (2) \"openapi type: boolean vs string 'true'/'false' is a contract mismatch\" — false, `type: boolean` is the idiomatic OpenAPI representation for a boolean query param (serialized as the strings true/false on the wire), which is exactly what the handler compares against. Tests pass 16/16.",
+    "human_action": "PR left open pending code-review context improvement (not override-merged). Harvested as judge-calibration data."
+  },
+  "notes": "Code-review's second clean false positive (pairs with cr-005), and the first harvested from the live @talos pipeline rather than a hand-seeded PR. Both this and cr-005 share a failure signature: the reviewer invents a defect by misreading the file's own established convention (here, numeric status returns; in cr-005, the early-return control flow and the default export). Strong evidence the agent reviews the diff hunk in isolation without the surrounding-file context needed to know what is idiomatic. Drove the code-review context-improvement work.",
+  "resolution": {
+    "date": "2026-06-20",
+    "fix": "Rewrote the code-review agent to drive the Pi coding agent inside a checkout of the repo, so it reads full files (not just the diff hunk) and a firmer prompt requires grounding every claimed defect in the actual code. See agents/code-review/agent.py.",
+    "model": "anthropic/claude-haiku-4.5 (Pi)",
+    "verdict": "PASS",
+    "grading": "FIXED. The Pi reviewer now passes this change, explicitly citing that it 'follows established patterns in handler.js (returning status codes, early error returns, logging)' — the exact convention the diff-only reviewer was blind to. Validated 2/2 hermetic replays; recall confirmed intact on real-defect cr-011 (still correctly FAILs the inverted !== filter, 2/2)."
+  },
+  "suite_note": "Graduated capability->regression 2026-06-20: the convention-blindness false positive is fixed by the Pi rewrite, and the agent now passes this reliably. It joins the gate so the false positive can never silently return."
+}

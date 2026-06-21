@@ -1,6 +1,6 @@
 {
   "id": "cr-003",
-  "suite": "regression",
+  "suite": "capability",
   "agent": "code-review",
   "track": "wave1 (organic)",
   "created": "2026-06-10",
@@ -17,5 +17,6 @@
     "output_file": "trial-2026-06-10.md",
     "grading": "True positive: concatenation defect is real. Partial credit: did not flag the regression to substring matching vs the issue spec (the security-relevant miss); padded with weaker DRY/signature points."
   },
-  "notes": "Second consecutive blocked attempt on issue #33 — cost_to_success signal. PR closed superseded by v3 (skeleton-level spec)."
+  "notes": "Second consecutive blocked attempt on issue #33 — cost_to_success signal. PR closed superseded by v3 (skeleton-level spec).",
+  "suite_note": "Reclassified regression->capability 2026-06-21: with the Pi+code-access rewrite and the correctness-scrutiny prompt, the agent catches this subtle suppression-matching defect only ~50% of the time (correct on targeted reruns, missed on the full-suite pass of 2026-06-21). Catching it *correctly* needs issue #33's anchored-regex requirement, which the reviewer never sees. A defect the agent does not solve reliably is the hill (capability), not the gate (regression); graduate back when it's caught reliably (e.g. by feeding the agent the issue requirement, or trials-majority once the catch rate is high enough)."
 }

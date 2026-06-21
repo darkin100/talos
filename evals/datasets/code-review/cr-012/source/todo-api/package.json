@@ -1,0 +1,14 @@
+{
+  "name": "talos-todo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Talos demo Todo API — vanilla Vercel functions",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node dev-server.js",
+    "test": "node --test test/*.test.js"
+  }
+}

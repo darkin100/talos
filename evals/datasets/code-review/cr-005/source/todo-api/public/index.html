@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Talos Todo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #111;
+        --muted: #666;
+        --border: #ddd;
+        --accent: #2563eb;
+        --danger: #b91c1c;
+        --card: #fff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0b0c;
+          --fg: #f5f5f5;
+          --muted: #9ca3af;
+          --border: #2a2a2e;
+          --accent: #60a5fa;
+          --danger: #f87171;
+          --card: #131316;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+          Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        line-height: 1.4;
+      }
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 2rem 1rem 4rem;
+      }
+      header { margin-bottom: 1.5rem; }
+      h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+      .subtitle { color: var(--muted); font-size: 0.875rem; }
+      form {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      input[type="text"], input[type="search"] {
+        flex: 1;
+        padding: 0.55rem 0.75rem;
+        font: inherit;
+        background: var(--card);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+      button {
+        padding: 0.55rem 0.9rem;
+        font: inherit;
+        background: var(--accent);
+        color: #fff;
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      button.link {
+        background: transparent;
+        color: var(--danger);
+        padding: 0;
+        font-size: 0.85rem;
+      }
+      .filter-bar {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+      .filter-bar input { margin: 0; }
+      ul { list-style: none; padding: 0; margin: 0; }
+      li {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.6rem 0.75rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 0.4rem;
+      }
+      li.completed .title { text-decoration: line-through; color: var(--muted); }
+      .title { flex: 1; word-break: break-word; }
+      .empty {
+        color: var(--muted);
+        font-style: italic;
+        padding: 1rem 0;
+      }
+      .status {
+        margin-top: 1rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        min-height: 1.2em;
+      }
+      .status.error { color: var(--danger); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Talos Todo</h1>
+        <div class="subtitle">
+          A tiny webapp on top of the Talos demo API.
+        </div>
+      </header>
+
+      <form id="create-form">
+        <input
+          id="new-title"
+          type="text"
+          placeholder="What needs doing?"
+          autocomplete="off"
+          required
+        />
+        <button type="submit">Add</button>
+      </form>
+
+      <div class="filter-bar">
+        <input
+          id="search"
+          type="search"
+          placeholder="Filter by title…"
+          autocomplete="off"
+        />
+      </div>
+
+      <ul id="todo-list"></ul>
+      <div id="empty" class="empty" hidden>No todos yet.</div>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </main>
+
+    <script type="module">
+      const listEl = document.getElementById('todo-list');
+      const emptyEl = document.getElementById('empty');
+      const statusEl = document.getElementById('status');
+      const form = document.getElementById('create-form');
+      const titleInput = document.getElementById('new-title');
+      const searchInput = document.getElementById('search');
+
+      let todos = [];
+      let query = '';
+
+      function setStatus(msg, isError = false) {
+        statusEl.textContent = msg;
+        statusEl.classList.toggle('error', isError);
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch(path, {
+          headers: { 'content-type': 'application/json' },
+          ...options,
+        });
+        if (!res.ok) {
+          let detail = res.statusText;
+          try {
+            const body = await res.json();
+            if (body && body.error) detail = body.error;
+          } catch {}
+          throw new Error(`${res.status} ${detail}`);
+        }
+        if (res.status === 204) return null;
+        return res.json();
+      }
+
+      function render() {
+        const visible = query
+          ? todos.filter((t) =>
+              t.title.toLowerCase().includes(query.toLowerCase()),
+            )
+          : todos;
+
+        listEl.innerHTML = '';
+        for (const t of visible) {
+          const li = document.createElement('li');
+          if (t.completed) li.classList.add('completed');
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = !!t.completed;
+          checkbox.addEventListener('change', () => toggle(t));
+
+          const title = document.createElement('span');
+          title.className = 'title';
+          title.textContent = t.title;
+
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.className = 'link';
+          del.textContent = 'delete';
+          del.addEventListener('click', () => remove(t));
+
+          li.append(checkbox, title, del);
+          listEl.append(li);
+        }
+        emptyEl.hidden = visible.length > 0;
+      }
+
+      async function load() {
+        try {
+          todos = await api('/api/todos');
+          render();
+          setStatus(`${todos.length} todo${todos.length === 1 ? '' : 's'}`);
+        } catch (err) {
+          setStatus(`Failed to load: ${err.message}`, true);
+        }
+      }
+
+      async function create(title) {
+        const created = await api('/api/todos', {
+          method: 'POST',
+          body: JSON.stringify({ title }),
+        });
+        todos.push(created);
+      }
+
+      async function toggle(todo) {
+        const updated = await api(`/api/todos/${todo.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            title: todo.title,
+            completed: !todo.completed,
+          }),
+        });
+        const idx = todos.findIndex((t) => t.id === todo.id);
+        if (idx !== -1) todos[idx] = updated;
+        render();
+      }
+
+      async function remove(todo) {
+        await api(`/api/todos/${todo.id}`, { method: 'DELETE' });
+        todos = todos.filter((t) => t.id !== todo.id);
+        render();
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = titleInput.value.trim();
+        if (!title) return;
+        try {
+          await create(title);
+          titleInput.value = '';
+          render();
+          setStatus(`Added "${title}"`);
+        } catch (err) {
+          setStatus(`Add failed: ${err.message}`, true);
+        }
+      });
+
+      searchInput.addEventListener('input', () => {
+        query = searchInput.value;
+        render();
+      });
+
+      load();
+    </script>
+  </body>
+</html>

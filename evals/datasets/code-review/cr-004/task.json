@@ -1,6 +1,6 @@
 {
   "id": "cr-004",
-  "suite": "regression",
+  "suite": "capability",
   "agent": "code-review",
   "track": "wave1 (organic)",
   "created": "2026-06-10",
@@ -17,5 +17,6 @@
     "output_file": "trial-2026-06-10.md",
     "grading": "Mixed quality: correctly flagged the substring regression, but the lead claim (scan_log_file signature change breaks the caller at line 301-302) is factually wrong — the single call site is updated and errors.extend on the unpacked list is valid. Hallucinated-defect example for judge calibration: claims must be verified against the diff."
   },
-  "notes": "Final agent attempt before human escalation on issue #33. Three-attempt arc: PR #34 (security FAIL, real), #35 (code-review FAIL, real), #36 (code-review FAIL, real reason + hallucinated reason)."
+  "notes": "Final agent attempt before human escalation on issue #33. Three-attempt arc: PR #34 (security FAIL, real), #35 (code-review FAIL, real), #36 (code-review FAIL, real reason + hallucinated reason).",
+  "suite_note": "Reclassified regression->capability 2026-06-21: same as cr-003 — the Pi+code-access agent catches this substring-vs-anchored-regex defect only intermittently (caught on targeted reruns, missed on the full-suite pass). Reliable detection needs issue #33's anchored-regex requirement, absent from the reviewed code. Capability (the hill) until caught reliably."
 }
