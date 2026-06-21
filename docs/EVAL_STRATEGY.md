@@ -9,7 +9,7 @@ We grade **outcomes** (the PR comment, the patch, the issue body, the release no
 
 Above the per-agent layer, the harness is graded by **DORA + AI caveats** (deployment frequency vs change failure rate plotted together), plus Talos-specific cross-cutting metrics: **gate escape rate**, **override rate**, **cost per PR**, **trust-cost ratio**, and **harness drift**.
 
-The whole thing rides on Phoenix: every agent's existing OTel span tree *is* the **transcript**. Online evaluators score those spans post-hoc; dataset experiments re-run suites on prompt changes and post a diff to the PR.
+The whole thing rides on a trace store — **Arize AX** today (Phoenix is the API-compatible OSS equivalent): every agent's existing OpenInference span tree *is* the **transcript**. Online evaluators score those spans post-hoc; captured production flows are harvested back into dataset tasks (§3.5); dataset experiments re-run suites on prompt changes and post a diff to the PR.
 
 **Minimum viable cut to demo this**: 5 tasks per agent + 1 code-based grader each + a per-PR comment showing pass/fail vs main. Everything else is incremental on that.
 
@@ -35,9 +35,11 @@ These are direct applications of Anthropic's roadmap to Talos.
 5. **Capability suites graduate to regression suites.** Once an agent passes
    a capability task reliably, move it to the regression suite and add a
    harder capability task. This is Anthropic's Step 7.
-6. **Phoenix is the substrate.** Every agent already emits OTel spans
-   (the **transcript** in glossary terms). Online evaluators score those
-   spans post-hoc; dataset experiments re-run task suites on prompt changes.
+6. **The trace store is the substrate.** Every agent already emits
+   OpenInference spans to **Arize AX** (the **transcript** in glossary terms;
+   Phoenix is the API-compatible OSS equivalent). Online evaluators score
+   those spans post-hoc; captured flows are harvested into dataset tasks
+   (§3.5); dataset experiments re-run task suites on prompt changes.
 
 ## 2. Per-agent strategy
 
@@ -173,9 +175,17 @@ that AI-generated code lifts deployment frequency while CFR quietly grows.
 | **Trust-cost ratio** | (1 − override_rate) / cost_per_PR                                                      | Single demoable harness-quality number              |
 | **Harness drift**    | Per-agent regression score moving > 2σ from 30-day rolling baseline                    | Catches silent model swaps, prompt edits, dep bumps |
 
-### 3.3 Phoenix wiring
+### 3.3 Trace substrate (Arize AX / Phoenix)
 
-Already partly there — every agent emits OTel spans.
+Already there — every agent emits OpenInference spans to **Arize AX**
+(`arize-otel`'s `register()` + `OpenAIInstrumentor`; see
+`agents/*/agent.py:_setup_arize_tracing`). Each run's root span is
+`talos.<agent>.run` (kind `AGENT`) carrying `input.value` / `output.value` as
+JSON plus `session.id`, `metadata`, and the propagated `pr_number`. The sketch
+below is written against Phoenix's evaluator API; the same wiring runs on Arize
+AX's online-evals surface. **Either way it must be pinned to a tested SDK
+version or labelled pseudocode** (TODO.md #6) — treat the snippet as the shape,
+not a tested call.
 
 - **Trace tree per PR**: propagate `pr_number` as a span attribute so the full
   agent chain (code → code-review → security-review → contract-test → rca)
@@ -227,6 +237,90 @@ oranges.
 | Weekly                                               | Drift dashboard review, judge-agreement spot check                          | manual       |
 | Monthly                                              | Human label of 10% production sample → suite refresh                        | ~2 hrs human |
 | Quarterly                                            | Rotate judge model family; re-baseline against human grader                 | ~½ day SME   |
+
+### 3.5 Harvesting Arize AX traces into eval datasets
+
+The production→dataset flywheel, made concrete. Every agent run already lands
+in Arize AX as an OpenInference trace (§3.3), so the trace store is a standing
+pool of **real, already-executed agent flows** — exactly the "production
+sample" the suite-refresh cadence (§3.4 monthly; anti-pattern *stale suites*)
+calls for, but which this repo's short history can't otherwise supply. Up to
+now every task was either *seeded* (a planted flaw on a fixture branch) or
+*organically harvested by re-running the pipeline*. Arize traces add a third,
+cheaper source: tasks that cost nothing to generate because the agent already
+ran them in anger. It also closes the online→offline loop the strategy keeps
+promising — the **Online signal** rows in §2 (override rate, suppression-list
+utilisation, FPR-on-clean) stop being dashboards and become *labelled tasks*.
+
+The harvest, step by step:
+
+1. **Export the root spans** for a window with the Arize exporter (SDK ≥ 7.0.3):
+
+   ```python
+   from arize.exporter import ArizeExportClient
+   from arize.utils.types import Environments
+
+   df = ArizeExportClient().export_model_to_df(
+       space_id=SPACE_ID,
+       model_id="talos-code-review",            # = the agent's ARIZE_PROJECT_NAME
+       environment=Environments.TRACING,
+       start_time=..., end_time=...,
+       columns=["context.span_id", "name", "attributes.openinference.span.kind",
+                "attributes.input.value", "attributes.output.value",
+                "attributes.metadata", "attributes.session.id"],
+   )
+   # keep one root span per trace: name == "talos.<agent>.run" and kind == "AGENT"
+   ```
+
+2. **Map to the task schema.** Each root span becomes one
+   `evals/datasets/<agent>/<task-id>/`: `attributes.input.value` → the hermetic
+   input the runner already understands (`diff.patch` / `input.json` /
+   `logs.jsonl`), `attributes.output.value` → the `reference_trial` block (the
+   verdict / comment / issue the agent actually produced). For code-review, also
+   freeze the `source/` snapshot at the recorded SHA — the existing replay
+   requirement (a `cr-*` task must review the tree it saw, not current `main`).
+
+3. **Exclude non-runs.** Drop spans whose output matches an `InfraFailure`
+   signature (`evals/runner.py` `INFRA_PATTERNS`) — they never meaningfully
+   executed, so they must not become graded tasks. Same infra-vs-agent split the
+   runner already enforces, applied at harvest time.
+
+4. **Scrub before commit.** The suite is committed to git, so strip secrets /
+   PII from the trace payload first (tokens, emails, internal URLs). Reuse the
+   V3 lesson (harness-failure log #8): a real `sk_live_…` token in a trace would
+   trip push protection — redact, don't commit-then-revert.
+
+5. **Label (human-in-the-loop).** The maintainer assigns the one thing the trace
+   can't carry — ground truth. Capture it as an **Arize annotation** on the span
+   (`category`, `expected_verdict`, `diagnosis_correct`) and export the
+   annotation alongside the span so the label travels with the task. This *is*
+   the "maintainer re-grades a sample whenever a suite or judge model changes"
+   mechanism (TODO.md #3) — performed on real traffic, not a fictional SME panel.
+
+6. **Admit to capability, graduate to regression.** Harvested tasks enter the
+   **capability** suite by default (fresh, possibly-hard, not yet reliably
+   solved) and graduate under the existing rule once the agent passes them
+   across trials. Harvest the high-signal traces first: **human overrides and
+   suspected false positives** are precisely the failures the suite exists to
+   catch (cr-005, cr-016, sec-012 all entered this way, by hand — this step
+   automates that path).
+
+**Contamination guard.** A task harvested from a production trace must be held
+out from prompt-tuning the agent that produced it, or the gate measures
+memorisation, not capability (the same discipline §5 applies to SWE-bench). Tag
+each Arize-harvested task with its source window so a prompt change is only ever
+evaluated against tasks that predate it.
+
+**Platform-native option (keep it in Arize).** The offline path above (export →
+`evals/datasets/` → pytest gate) is **primary**: durable, diffable, and runs in
+CI with no live-SaaS dependency, so the per-PR gate never blocks on an Arize
+call. Arize *also* runs the suite in-platform — curate the same spans into a
+**Dataset** (`ArizeDatasetsClient.create_dataset(..., dataset_type=GENERATIVE,
+data=df)`) and replay prompt changes with `run_experiment(space_id, dataset_id,
+task, evaluators=[...])`. That is the Arize-native equivalent of §3.3's
+dataset-experiment idea and the natural home for the **model-based
+(LLM-as-judge)** grader and the nightly capability curve. Split of duties: gate
+on the committed pytest suite; trend and judge in Arize.
 
 ## 4. Implementation phases
 
