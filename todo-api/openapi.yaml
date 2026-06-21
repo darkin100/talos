@@ -28,6 +28,13 @@ paths:
   /api/todos:
     get:
       summary: List todos
+      parameters:
+        - in: query
+          name: completed
+          required: false
+          schema:
+            type: boolean
+          description: Filter todos by completion status
       responses:
         '200':
           description: A (possibly empty) list of todos
@@ -37,6 +44,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Todo'
+        '400':
+          description: Invalid completed parameter (must be "true" or "false")
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       summary: Create a todo
       requestBody:

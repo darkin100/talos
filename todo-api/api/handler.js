@@ -26,7 +26,23 @@ function handleHealthz(req, res) {
 
 function handleTodos(req, res) {
   if (req.method === 'GET') {
-    res.status(200).json(store.list());
+    let todos = store.list();
+    // Filter by completion status if 'completed' query param is provided
+    const completedParam = req.query && req.query.completed;
+    if (completedParam !== undefined && completedParam !== '') {
+      // Only 'true' and 'false' are valid values
+      if (completedParam === 'true') {
+        todos = todos.filter(t => t.completed === true);
+      } else if (completedParam === 'false') {
+        todos = todos.filter(t => t.completed === false);
+      } else {
+        // Invalid value
+        logEvent('error', 'invalid completed parameter', { status: 400, completed: completedParam });
+        res.status(400).json({ error: 'completed must be "true" or "false"' });
+        return 400;
+      }
+    }
+    res.status(200).json(todos);
     return 200;
   }
   if (req.method === 'POST') {
