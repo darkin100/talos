@@ -54,12 +54,26 @@ item at a time; tick when the doc (or repo) reflects the change.
   prompt-tuning can be held out (contamination guard). Harvest overrides + FPs
   first — that path is currently manual (cr-005/cr-016/sec-012).
 
-- [ ] **5. Make the gates statistically sound — specify trials per task.** The
-  strategy gates on single thresholds ("block if F1 drops > 5 pp") with no
-  trial count; on a 20-task suite one task = 5 pp, so a single flaky trial
-  trips the gate. State trials-per-task (e.g. 3 trials, majority pass; report
-  pass@1 and pass@3) and set thresholds in units the suite size can resolve.
-  *Most important technical fix in the doc.*
+- [x] **5. Make the gates statistically sound — specify trials per task.**
+  *(Done 2026-06-21.)* The original ask: the strategy gated on single
+  thresholds ("block if F1 drops > 5 pp") with no trial count; on a 20-task
+  suite one task = 5 pp, so a single flaky trial tripped the gate — state
+  trials-per-task (3 trials, majority pass; report pass@1 and pass@3) and set
+  thresholds in units the suite size can resolve. The CI already ran the gate
+  at `--trials 3` with strict-majority grading
+  (`.github/workflows/talos-evals.yml`); this change makes the **strategy doc**
+  match the runner: every §0/§1/§2/§3 gate, saturation watch and the harness-
+  drift / per-PR cadence rows now state trials/task = 3, strict-majority
+  (ties fail, infra trials excluded), report **both pass@1 (trial-level) and
+  majority pass@3 (task-level)**, and express every threshold in the
+  pp-per-task each suite actually resolves (e.g. no 5 pp gate on a 10-pp/task
+  suite). Principle 5 now defines graduation capability→regression as reliable
+  success *across trials* (sustained majority pass@3 on N consecutive nights),
+  not a single lucky pass. `evals/report.py` now surfaces the recorded
+  `pass_rate` ("k/N") per task in the table and a per-agent pass@1 line
+  alongside the majority pass@k headline (parses `pass_rate` defensively;
+  legacy rows = single trial; per-category reporting and the results.json
+  schema / MARKER unchanged). *Most important technical fix in the doc.*
 
 ## Moderate
 
