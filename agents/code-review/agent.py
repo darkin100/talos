@@ -357,6 +357,9 @@ def run_pi_review(workspace: str, prompt: str, model: str, openrouter_key: str, 
     Reconstructs OpenInference CHAIN/LLM/TOOL spans from Pi's event stream so
     the review keeps the per-agent trace tree the other agents emit.
     """
+    # The prompt embeds the full PR diff, which on a large PR is hundreds of KB.
+    # Passing it as an argv element blows the OS arg-list limit (OSError E2BIG),
+    # so deliver it on stdin instead — Pi reads stdin as the initial message.
     cmd = [
         "pi",
         "--mode", "json",
@@ -364,21 +367,33 @@ def run_pi_review(workspace: str, prompt: str, model: str, openrouter_key: str, 
         "--model", model,
         "--no-session",
         "--append-system-prompt", PI_APPEND_SYSTEM_PROMPT,
-        prompt,
     ]
     sensitive = {"GITHUB_TOKEN", "GH_TOKEN", "ARIZE_API_KEY", "ARIZE_SPACE_ID"}
     env_vars = {k: v for k, v in os.environ.items() if k not in sensitive}
     env_vars["OPENROUTER_API_KEY"] = openrouter_key
-    print(f"[code-review] launching pi in {workspace}: {' '.join(cmd[:6])} ... <prompt {len(prompt)} chars>", flush=True)
+    print(f"[code-review] launching pi in {workspace}: {' '.join(cmd[:6])} ... <prompt {len(prompt)} chars via stdin>", flush=True)
     proc = subprocess.Popen(
         cmd,
         cwd=workspace,
         env=env_vars,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
     )
+    # Feed the prompt from a thread so a large prompt can't deadlock against a
+    # full stdout pipe buffer (we drain stdout in the loop below).
+    import threading
+
+    def _feed_stdin() -> None:
+        try:
+            proc.stdin.write(prompt)
+            proc.stdin.close()
+        except (BrokenPipeError, ValueError):
+            pass
+
+    threading.Thread(target=_feed_stdin, daemon=True).start()
 
     conversation: list[dict] = [
         {"message.role": "system", "message.content": PI_APPEND_SYSTEM_PROMPT},
