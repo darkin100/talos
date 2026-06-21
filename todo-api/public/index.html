@@ -107,6 +107,15 @@
         min-height: 1.2em;
       }
       .status.error { color: var(--danger); }
+      footer {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+        text-align: center;
+        font-size: 0.8rem;
+        color: var(--muted);
+        border-top: 1px solid var(--border);
+      }
     </style>
   </head>
   <body>
@@ -142,6 +151,10 @@
       <div id="empty" class="empty" hidden>No todos yet.</div>
       <div id="status" class="status" role="status" aria-live="polite"></div>
     </main>
+
+    <footer>
+      <p>&copy; 2026. All rights reserved.</p>
+    </footer>
 
     <script type="module">
       const listEl = document.getElementById('todo-list');
