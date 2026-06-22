@@ -4,6 +4,15 @@ name: Talos Evals
 # replay that agent's regression suite and post the per-category results as a
 # PR comment. Path filter is agents/** only — prompts live inside
 # agents/*/agent.py, there is no separate prompts/ tree (TODO.md #10).
+#
+# Structure: one matrix leg PER AGENT (detect -> eval -> report). Legs run in
+# parallel, so the wall-clock is the slowest single agent (code-review, the
+# Pi-driven long pole) rather than the sum of every suite — this both isolates
+# which agent regressed (each leg is its own check) and keeps the run clear of
+# the timeout that was cancelling the old single-job version. Each leg writes
+# only its own rows to .results/results.json (evals/conftest.py overwrites, it
+# does not append), so the report job downloads every leg's artifact and merges
+# them (evals/scripts/merge_results.py) before rendering the one PR comment.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -24,57 +33,91 @@ permissions:
   pull-requests: write
 
 jobs:
-  evals:
+  # Decide which agents this PR needs to replay, emitted as a JSON array that
+  # fans the `eval` job out into one matrix leg per agent.
+  detect:
     runs-on: ubuntu-latest
-    # 3 trials/task × the Pi-driven code-review agent is the slow path. We no
-    # longer re-run the suite on the base ref — the Δ is computed against the
-    # committed ground-truth baseline (evals/.baselines/ground-truth.json,
-    # re-cast by talos-evals-recast) — so a single-run budget is enough.
-    timeout-minutes: 35
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+      run: ${{ steps.affected.outputs.run }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Detect affected agents
         id: affected
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          # Run only the suites whose agent code changed; a change under
-          # evals/ (runner or datasets) reruns everything.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "args=" >> "$GITHUB_OUTPUT"; exit 0
+          set -euo pipefail
+          # Replayable agents == runner.REPLAYERS keys. The `code` agent has no
+          # replayer (talos-bench replays in the nightly harness), so it is
+          # never part of the per-PR matrix.
+          ALL='code-review security-review rca release-notes contract-test'
+
+          emit() {  # $1 = space-separated agent list -> matrix + run outputs
+            if [ -z "$1" ]; then
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            else
+              MATRIX=$(printf '%s\n' $1 | jq -R . | jq -cs .)
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          # Manual runs replay everything.
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            emit "$ALL"; exit 0
           fi
-          CHANGED=$(gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --name-only)
+          # A change under evals/ (runner or datasets) can affect every suite,
+          # so rerun them all.
+          CHANGED=$(gh pr diff "$PR" --repo "$REPO" --name-only)
           echo "$CHANGED"
           if echo "$CHANGED" | grep -q "^evals/"; then
-            echo "args=" >> "$GITHUB_OUTPUT"; exit 0
+            emit "$ALL"; exit 0
           fi
-          AGENTS=$(echo "$CHANGED" | grep "^agents/" | cut -d/ -f2 | sort -u)
-          ARGS=""
-          for a in $AGENTS; do
-            # code (talos-bench) replays in the nightly harness, not here
-            [ "$a" = "code" ] && continue
-            ARGS="$ARGS --agent $a"
+          # Otherwise replay only the changed agents that are replayable.
+          CHANGED_AGENTS=$(echo "$CHANGED" | grep "^agents/" | cut -d/ -f2 | sort -u || true)
+          SELECTED=""
+          for a in $CHANGED_AGENTS; do
+            for r in $ALL; do
+              [ "$a" = "$r" ] && SELECTED="$SELECTED $a"
+            done
           done
-          if [ -z "$ARGS" ] && [ -n "$AGENTS" ]; then
-            echo "only the code agent changed — nothing to replay per-PR"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+          SELECTED=$(echo ${SELECTED:-} | xargs || true)
+          if [ -z "$SELECTED" ] && [ -n "$CHANGED_AGENTS" ]; then
+            echo "only non-replayable agent(s) changed ($CHANGED_AGENTS) — nothing to replay per-PR"
           fi
-          echo "args=$ARGS" >> "$GITHUB_OUTPUT"
+          emit "$SELECTED"
+
+  # One leg per affected agent, in parallel. fail-fast: false so a regression in
+  # one agent still lets the others finish and report; a failed leg turns the
+  # leg (and the run) red — that is the gate.
+  eval:
+    needs: detect
+    if: ${{ needs.detect.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    # Per-agent budget, not the whole suite. code-review (Pi-driven, the long
+    # pole) replays in ~20 min; 30 leaves headroom for build + 3 trials/task.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        if: steps.affected.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install runner deps
-        if: steps.affected.outputs.skip != 'true'
         run: pip install -r evals/requirements.txt
 
-      - name: Run eval suite
-        if: steps.affected.outputs.skip != 'true'
+      - name: Replay ${{ matrix.agent }}
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
@@ -84,18 +127,53 @@ jobs:
           python -m pytest evals -v \
             --suite "${{ github.event.inputs.suite || 'regression' }}" \
             --trials "${{ github.event.inputs.trials || '3' }}" \
-            ${{ steps.affected.outputs.args }}
+            --agent "${{ matrix.agent }}"
+
+      - name: Upload per-agent results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ matrix.agent }}
+          path: evals/.results/results.json
+          if-no-files-found: ignore
+
+  # Merge every leg's rows and post the single PR comment. Runs even when a leg
+  # failed (always()) so the comment reflects the full picture; the leg failure,
+  # not this job, is what gates the PR.
+  report:
+    needs: [detect, eval]
+    if: ${{ always() && needs.detect.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download per-agent results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eval-results-*
+          path: artifacts
+
+      - name: Merge per-agent results
+        run: |
+          # Each leg overwrote its own .results/results.json with just its rows
+          # (evals/conftest.py); concatenate them into the one file report.py
+          # reads. report.py keys the Δ-vs-base diff by (agent, task), so a
+          # partial agent set still diffs correctly against the full ground truth.
+          python evals/scripts/merge_results.py artifacts evals/.results/results.json
 
       - name: Render report
-        if: always() && steps.affected.outputs.skip != 'true'
         run: |
           # Δ-vs-base is computed against the committed ground-truth baseline
           # (EVAL_STRATEGY.md §4.1), re-cast deliberately by talos-evals-recast
-          # rather than recomputed per-PR. report.py keys the diff by
-          # (agent, task), so a full-coverage ground truth diffs correctly
-          # against whatever affected subset this PR ran. If the file is absent
-          # the report degrades to the no-delta view; its .meta.json sidecar
-          # (provenance) is picked up automatically when present.
+          # rather than recomputed per-PR. If the file is absent the report
+          # degrades to the no-delta view; its .meta.json sidecar (provenance)
+          # is picked up automatically when present.
           GT=evals/.baselines/ground-truth.json
           if [ -f "$GT" ]; then
             python evals/report.py --baseline "$GT" | tee eval-report.md
@@ -104,7 +182,7 @@ jobs:
           fi
 
       - name: Post PR comment
-        if: always() && github.event_name == 'pull_request' && steps.affected.outputs.skip != 'true'
+        if: ${{ github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -120,10 +198,10 @@ jobs:
             gh pr comment "$PR" --repo ${{ github.repository }} --body-file eval-report.md
           fi
 
-      - name: Upload results artifact
-        if: always() && steps.affected.outputs.skip != 'true'
+      - name: Upload combined results artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-results-${{ github.run_id }}
+          name: eval-results-combined-${{ github.run_id }}
           path: evals/.results/results.json
           if-no-files-found: ignore
