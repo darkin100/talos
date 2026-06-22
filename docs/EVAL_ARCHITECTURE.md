@@ -5,81 +5,73 @@ is executed and graded, and how the result becomes a per-PR signal. This is the
 "bring it to life" companion to [`EVAL_STRATEGY.md`](./EVAL_STRATEGY.md) (the
 why) and [`ARCHITECTURE.md`](./ARCHITECTURE.md) (the platform).
 
+## 1 · The big picture
+
+The whole system in one loop: tasks are collected, run on every PR, and turned
+into a signal — and real runs feed new tasks back in (the flywheel).
+
+```mermaid
+flowchart LR
+  sources["Task sources<br/>seeded · pipeline · Arize"]
+  datasets[("evals/datasets/<br/>tasks + ground-truth labels")]
+  run["CI runner<br/>replay each agent in Docker<br/>× N trials → grade"]
+  report["report.py<br/>pass@1 · majority pass@3<br/>Δ vs baseline"]
+  comment["Sticky PR comment"]
+
+  sources --> datasets --> run --> report --> comment
+  run -.->|"flywheel: live traces → fresh tasks"| sources
+
+  classDef store fill:#fff3cd,stroke:#b8860b,color:#000;
+  class datasets store;
+```
+
+## 2 · Execution detail
+
+How a PR run actually executes and grades, and how the committed baseline (a
+separate manual job) gives the report something to diff against.
+
 ```mermaid
 flowchart TB
-  %% ---- where tasks come from ----
-  subgraph SRC["1 · Task sources — how eval tasks are created"]
-    direction LR
-    seeded["Seeded fixtures<br/>planted flaws on eval-seed/* branches"]
-    pipe["Pipeline harvest<br/>real @talos runs → labelled task"]
-    arize["Arize harvest<br/>harvest_arize.py reads live traces"]
-  end
-
   datasets[("evals/datasets/&lt;agent&gt;/&lt;id&gt;/<br/>task.json · hermetic input · source/ snapshot")]
-  maintainer["👤 Maintainer<br/>supplies ground-truth label (NEEDS_LABEL)"]
-
-  seeded --> datasets
-  pipe --> datasets
-  arize --> datasets
-  maintainer -.->|labels| datasets
 
   %% ---- the two suites ----
-  subgraph SUITES["2 · Two suites — same tasks, different cadence"]
-    direction LR
-    regression["regression — the GATE<br/>per-PR · trials/task = 3"]
-    capability["capability — the HILL<br/>nightly"]
-  end
+  regression["regression — the GATE<br/>per-PR · trials/task = 3"]
+  capability["capability — the HILL<br/>nightly"]
   datasets --> regression
   datasets --> capability
 
   %% ---- execution ----
-  trigger["talos-evals.yml (CI)<br/>on: PR touching agents/** or evals/**"]
-  regression --> trigger
+  regression --> trigger["talos-evals.yml (CI)<br/>on: PR touching agents/** or evals/**"]
 
-  subgraph RUN["3 · Execution — the evals/ runner"]
+  subgraph RUN["the evals/ runner"]
     direction TB
-    discover["conftest.py<br/>discover tasks (--agent / --suite / --trials)"]
     replay["runner.replay()<br/>run agent in Docker · DRY_RUN · hermetic input<br/>repeated × N trials"]
     infra{"InfraFailure?<br/>(platform vs agent)"}
     skip["SKIP<br/>never counts as an agent fail"]
-    grade["graders.py<br/>code-based verdict match (the gate)"]
+    grade["graders.py<br/>code-based verdict match"]
     majority["test_regression.py<br/>strict majority of graded trials"]
-    discover --> replay --> infra
+    replay --> infra
     infra -->|"yes — platform broke"| skip
     infra -->|no| grade --> majority
   end
-  trigger --> discover
+  trigger --> replay
+
+  %% ---- baseline (separate manual job) ----
+  recast["talos-evals-recast.yml (CI)<br/>workflow_dispatch · full suite, all agents"]
+  groundtruth[("ground-truth.json<br/>committed reference + provenance")]
+  datasets -.->|"all agents"| recast -->|"commits"| groundtruth
 
   %% ---- results + reporting ----
-  results[("results.json<br/>outcome · pass_rate k/N · detail")]
-  majority --> results
-
-  %% the baseline is NOT recomputed per-PR — it's a committed snapshot,
-  %% re-cast deliberately by a separate manual workflow.
-  recast["talos-evals-recast.yml (CI)<br/>on: workflow_dispatch (manual)<br/>re-runs full suite across all agents"]
-  groundtruth[("evals/.baselines/ground-truth.json<br/>committed reference + .meta.json provenance")]
-  datasets -.->|"all agents"| recast
-  recast -->|"commits"| groundtruth
-
-  report["report.py<br/>per-category · pass@1 + majority pass@3 · Δ vs ground truth"]
-  comment["Sticky PR comment<br/>regressions callout · per-task vs-base · baseline freshness"]
-  results --> report --> comment
+  majority --> results[("results.json<br/>outcome · pass_rate k/N")]
+  results --> report["report.py<br/>pass@1 + majority pass@3 · Δ vs ground truth"]
   groundtruth -.->|"--baseline (diffed by agent·task)"| report
-
-  %% ---- the flywheel ----
-  agentcall["agents call OpenRouter to reason<br/>+ emit OpenInference spans to Arize"]
-  replay --> agentcall
-  agentcall -.->|"flywheel: real traces → fresh tasks"| arize
+  report --> comment["Sticky PR comment<br/>regressions · per-task vs-base · freshness"]
 
   classDef store fill:#fff3cd,stroke:#b8860b,color:#000;
-  classDef person fill:#08427b,color:#fff,stroke:#052e56;
   classDef gate fill:#d4edda,stroke:#1f8a4c,color:#000;
   class datasets,results,groundtruth store;
-  class maintainer person;
   class regression,capability gate;
   style RUN fill:#eef4fb,stroke:#08427b;
-  style SRC fill:#f7f7f7,stroke:#888;
-  style SUITES fill:#f7f7f7,stroke:#888;
 ```
 
 ## Reading the diagram

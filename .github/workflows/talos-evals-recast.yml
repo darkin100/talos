@@ -7,6 +7,13 @@ name: Talos Evals — Re-cast Ground Truth
 # (talos-evals.yml). Run it when the agents, datasets, grader, or the
 # underlying model have moved enough that the baseline no longer reflects
 # reality — the per-PR comment surfaces the cast date so you can tell when.
+#
+# Structure mirrors talos-evals.yml: one matrix leg PER AGENT (recast) running
+# in parallel, so the wall-clock is the slowest single agent rather than the sum
+# of every suite. Each leg writes only its own rows to .results/results.json
+# (evals/conftest.py overwrites, it does not append), so the promote job
+# downloads every leg's artifact and merges them (evals/scripts/merge_results.py)
+# before committing the one ground-truth file.
 on:
   workflow_dispatch:
     inputs:
@@ -21,11 +28,39 @@ permissions:
   contents: write
 
 jobs:
-  recast:
+  # The baseline must cover EVERY replayable agent (a PR might touch any of
+  # them), so unlike talos-evals.yml's detect this always emits the full list.
+  # Kept as its own job so the matrix is built the same way and the agent list
+  # stays visibly in step with the per-PR workflow.
+  detect:
     runs-on: ubuntu-latest
-    # Casts the FULL suite (every replayable agent, no --agent filter), so give
-    # it more headroom than a single per-PR agent run.
-    timeout-minutes: 60
+    outputs:
+      matrix: ${{ steps.agents.outputs.matrix }}
+    steps:
+      - name: Enumerate replayable agents
+        id: agents
+        run: |
+          set -euo pipefail
+          # Replayable agents == runner.REPLAYERS keys. The `code` agent has no
+          # replayer (talos-bench replays in the nightly harness), so it is
+          # never part of the matrix.
+          ALL='code-review security-review rca release-notes contract-test'
+          MATRIX=$(printf '%s\n' $ALL | jq -R . | jq -cs .)
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  # One leg per agent, in parallel. fail-fast: false so every agent is cast even
+  # if one has failing tasks — the baseline records reality (current pass_rate
+  # per task), including failures, rather than aborting on the first.
+  recast:
+    needs: detect
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    # Per-agent budget, matching talos-evals.yml's per-leg timeout rather than
+    # the old whole-suite 60 min.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,16 +73,52 @@ jobs:
       - name: Install runner deps
         run: pip install -r evals/requirements.txt
 
-      - name: Run full suite (all replayable agents)
+      - name: Cast ${{ matrix.agent }}
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          # No --agent filter: ground truth must cover every agent a PR might
-          # touch, so any affected suite can diff against it. report.py keys the
-          # diff by (agent, task), so over-covering here is harmless.
           python -m pytest evals -v \
             --suite "${{ github.event.inputs.suite }}" \
-            --trials "${{ github.event.inputs.trials }}"
+            --trials "${{ github.event.inputs.trials }}" \
+            --agent "${{ matrix.agent }}"
+
+      - name: Upload per-agent results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ matrix.agent }}
+          path: evals/.results/results.json
+          if-no-files-found: ignore
+
+  # Merge every leg's rows into the one ground-truth file and commit it. Runs
+  # even when a leg failed (always()) so the baseline reflects the full picture.
+  promote:
+    needs: [detect, recast]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download per-agent results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eval-results-*
+          path: artifacts
+
+      - name: Merge per-agent results
+        run: |
+          # Each leg overwrote its own .results/results.json with just its rows
+          # (evals/conftest.py); concatenate them into the one file we promote.
+          mkdir -p evals/.results
+          python evals/scripts/merge_results.py artifacts evals/.results/results.json
 
       - name: Promote results to ground truth
         run: |
