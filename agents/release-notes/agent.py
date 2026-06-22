@@ -24,8 +24,7 @@ Outputs:
 
 Exit code: 0 on success, 1 on failure.
 """
-# demo: trigger the Talos eval pipeline (safe to revert)
-# demo: trigger the Talos eval pipeline (safe to revert)
+
 from __future__ import annotations
 
 import os
@@ -117,7 +116,7 @@ concise markdown release notes with these sections (omit empty ones):
     ## Changes
     ## Notes for operators
 
-Keep it under 300 words. Return ONLY the markdown, no preamble.
+ Return ONLY the markdown, no preamble.
 """
 
 
