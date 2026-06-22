@@ -83,7 +83,7 @@ def test_render_with_baseline_surfaces_all_deltas():
     out = render(cur, baseline=base)
 
     # Δ banner + regressions callout naming the regressed task only.
-    assert "Δ vs the base branch" in out
+    assert "Δ vs the committed ground-truth baseline" in out
     assert "1 regression(s) vs base" in out
     assert "**code-review/cr-011**" in out
     assert "code-review/cr-012" not in out.split("majority pass@k")[0]  # not in callout
@@ -107,3 +107,15 @@ def test_render_no_regressions_shows_clear_banner():
     base = [_row("rca", "incident-001", "pass", "3/3", category="")]
     out = render(cur, baseline=base)
     assert "✅ No regressions vs base." in out
+
+
+def test_render_surfaces_baseline_provenance():
+    cur = [_row("rca", "incident-001", "pass", "3/3", category="")]
+    base = [_row("rca", "incident-001", "pass", "3/3", category="")]
+    meta = {"cast_at": "2026-06-22T09:00:00Z", "commit": "abc1234", "suite": "regression", "trials": 3}
+    out = render(cur, baseline=base, baseline_meta=meta)
+    # Freshness shows in the caption so reviewers can judge a stale baseline.
+    assert "cast 2026-06-22T09:00:00Z" in out
+    assert "@abc1234" in out
+    # Absent meta degrades to the plain ground-truth caption (no provenance).
+    assert "cast 2026-06-22T09:00:00Z" not in render(cur, baseline=base)

@@ -2,14 +2,19 @@
 
 Usage:
     python evals/report.py [results.json] [--baseline BASELINE.json]
+                                          [--baseline-meta META.json]
 
 Prints markdown to stdout; the CI workflow pipes it into a PR comment.
 
-When a baseline (the same suite run on the PR's base branch, e.g. main) is
-supplied with --baseline, the comment also shows the **delta vs base** — this is
-the per-PR half of the EVAL_STRATEGY.md §4.1 close-the-loop arc. Because the
-same grader runs on both sides (§3.3), the delta is a true regression signal,
-not grader drift. The delta surfaces three ways:
+When a baseline is supplied with --baseline, the comment also shows the **delta
+vs base** — the per-PR half of the EVAL_STRATEGY.md §4.1 close-the-loop arc. The
+baseline is the committed ground-truth snapshot
+(evals/.baselines/ground-truth.json), re-cast deliberately by the
+talos-evals-recast workflow rather than recomputed on every PR. Its provenance
+sidecar (<baseline>.meta.json by convention, or --baseline-meta) is surfaced in
+the comment so reviewers can judge how fresh it is — once the ground truth
+drifts from the live grader/model, deltas read as indicative, not exact. The
+delta surfaces three ways:
   * a **regressions callout** at the top — any task that passed on base and
     fails here (the gate signal);
   * per-agent **Δ tasks-passed** and **Δ pass@1** vs base, computed over the
@@ -86,7 +91,26 @@ def _task_delta(cur: dict, base: dict | None) -> tuple[str, bool]:
     return "—", False
 
 
-def render(results: list[dict], baseline: list[dict] | None = None) -> str:
+def _provenance(meta: dict | None) -> str:
+    """One-line freshness summary of the ground-truth baseline for the caption."""
+    if not meta:
+        return ""
+    bits = []
+    if meta.get("cast_at"):
+        bits.append(f"cast {meta['cast_at']}")
+    if meta.get("commit"):
+        bits.append(f"@{meta['commit']}")
+    suite, trials = meta.get("suite"), meta.get("trials")
+    if suite or trials:
+        bits.append(f"{suite or '?'} ×{trials or '?'} trials")
+    return ", ".join(bits)
+
+
+def render(
+    results: list[dict],
+    baseline: list[dict] | None = None,
+    baseline_meta: dict | None = None,
+) -> str:
     by_agent: dict[str, list[dict]] = defaultdict(list)
     for r in results:
         by_agent[r["agent"]].append(r)
@@ -98,7 +122,13 @@ def render(results: list[dict], baseline: list[dict] | None = None) -> str:
     lines = [MARKER, "## Talos eval results", ""]
 
     if has_base:
-        lines.append("_Δ vs the base branch — same grader both sides (§3.3)._")
+        prov = _provenance(baseline_meta)
+        lines.append(
+            "_Δ vs the committed ground-truth baseline"
+            + (f" ({prov})" if prov else "")
+            + ". Re-cast manually via talos-evals-recast; if the grader or model "
+            "has moved since, read deltas as indicative._"
+        )
         lines.append("")
         regressions = [
             r for r in results if _task_delta(r, base_idx.get(_key(r)))[1]
@@ -197,7 +227,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--baseline", default=None,
-        help="path to the base-branch results.json; enables the Δ-vs-base view",
+        help="path to the ground-truth baseline results.json; enables the Δ-vs-base view",
+    )
+    parser.add_argument(
+        "--baseline-meta", default=None,
+        help="provenance sidecar for the baseline; defaults to <baseline>.meta.json if present",
     )
     args = parser.parse_args()
 
@@ -207,7 +241,17 @@ def main() -> int:
         return 1
     # A missing/empty baseline degrades gracefully to the no-delta view.
     baseline = _load(Path(args.baseline)) if args.baseline else None
-    print(render(results, baseline=baseline))
+    # Provenance is best-effort: explicit --baseline-meta, else the sibling
+    # <baseline>.meta.json, else no freshness line in the caption.
+    baseline_meta = None
+    if args.baseline:
+        meta_path = (
+            Path(args.baseline_meta) if args.baseline_meta
+            else Path(args.baseline).with_suffix(".meta.json")
+        )
+        if meta_path.exists():
+            baseline_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    print(render(results, baseline=baseline, baseline_meta=baseline_meta))
     return 0
 
 

@@ -26,10 +26,11 @@ permissions:
 jobs:
   evals:
     runs-on: ubuntu-latest
-    # 3 trials/task × the Pi-driven code-review agent is the slow path, and the
-    # Δ-vs-base step re-runs the affected suite on the base ref — give it
-    # headroom for ~2× the single-run budget.
-    timeout-minutes: 70
+    # 3 trials/task × the Pi-driven code-review agent is the slow path. We no
+    # longer re-run the suite on the base ref — the Δ is computed against the
+    # committed ground-truth baseline (evals/.baselines/ground-truth.json,
+    # re-cast by talos-evals-recast) — so a single-run budget is enough.
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,35 +86,19 @@ jobs:
             --trials "${{ github.event.inputs.trials || '3' }}" \
             ${{ steps.affected.outputs.args }}
 
-      - name: Baseline (base branch, same suite)
-        # Re-run the SAME affected suite against the PR's base ref so report.py
-        # can show a Δ-vs-base in the comment (EVAL_STRATEGY.md §4.1). Same
-        # grader runs both sides (§3.3), so the delta is signal, not drift.
-        # Best-effort: a flaky/failed/timed-out baseline must never block the
-        # PR — continue-on-error, and the delta simply doesn't render when
-        # baseline.json is absent.
-        if: github.event_name == 'pull_request' && steps.affected.outputs.skip != 'true'
-        continue-on-error: true
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          git fetch --depth=1 origin "$GITHUB_BASE_REF"
-          git worktree add ../talos-base FETCH_HEAD
-          pip install -r ../talos-base/evals/requirements.txt
-          # base code + base datasets; conftest writes results.json even on fail.
-          ( cd ../talos-base && python -m pytest evals -v \
-              --suite "${{ github.event.inputs.suite || 'regression' }}" \
-              --trials "${{ github.event.inputs.trials || '3' }}" \
-              ${{ steps.affected.outputs.args }} ) || true
-          cp ../talos-base/evals/.results/results.json evals/.results/baseline.json || true
-          git worktree remove --force ../talos-base || true
-
       - name: Render report
         if: always() && steps.affected.outputs.skip != 'true'
         run: |
-          # Pass --baseline only when the base run produced one (best-effort).
-          if [ -f evals/.results/baseline.json ]; then
-            python evals/report.py --baseline evals/.results/baseline.json | tee eval-report.md
+          # Δ-vs-base is computed against the committed ground-truth baseline
+          # (EVAL_STRATEGY.md §4.1), re-cast deliberately by talos-evals-recast
+          # rather than recomputed per-PR. report.py keys the diff by
+          # (agent, task), so a full-coverage ground truth diffs correctly
+          # against whatever affected subset this PR ran. If the file is absent
+          # the report degrades to the no-delta view; its .meta.json sidecar
+          # (provenance) is picked up automatically when present.
+          GT=evals/.baselines/ground-truth.json
+          if [ -f "$GT" ]; then
+            python evals/report.py --baseline "$GT" | tee eval-report.md
           else
             python evals/report.py | tee eval-report.md
           fi

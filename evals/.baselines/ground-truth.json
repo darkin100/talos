@@ -1,0 +1,108 @@
+[
+  {
+    "agent": "code-review",
+    "task": "cr-001",
+    "category": "none",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'none' (exit 0)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-006",
+    "category": "style_only",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-007",
+    "category": "style_only",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-008",
+    "category": "style_only",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-009",
+    "category": "style_only",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-010",
+    "category": "style_only",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-011",
+    "category": "real_defect",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'real_defect' (exit 1)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-012",
+    "category": "real_defect",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'real_defect' (exit 1)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-013",
+    "category": "real_defect",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'real_defect' (exit 1)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-014",
+    "category": "maintainability",
+    "outcome": "infra",
+    "detail": "infra signature: could not determine a code-review verdict"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-015",
+    "category": "missing_test",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'missing_test' (exit 1)"
+  },
+  {
+    "agent": "code-review",
+    "task": "cr-016",
+    "category": "none",
+    "outcome": "pass",
+    "pass_rate": "1/1",
+    "infra_trials": 0,
+    "detail": "trial 1: pass — verdict matches label category 'none' (exit 0)"
+  }
+]
