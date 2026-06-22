@@ -476,12 +476,14 @@ riding a real artifact:
    table and posts it as the sticky `<!-- talos:evals -->` comment. It reports
    the two numbers §0/§1 insist on: **pass@1** (trial-level, the variance check)
    and **majority pass@3** (task-level, the gate), per category, never a single
-   aggregate. *Gap to close for the full demo:* `report.py` today renders the
-   current run's table; the **delta vs the main baseline** is not yet computed in
-   the comment (see TODO #11 / not-built). The dual-grader comparison §3.3
-   guarantees the delta is apples-to-apples — the **same grader** runs on main
-   and on the PR — so when the delta lands it is a true regression signal, not
-   grader drift.
+   aggregate. It also shows the **delta vs base**: `report.py --baseline`
+   renders a regressions callout (tasks that passed on base and fail here), a
+   per-agent Δ pass@1 / Δ tasks-passed, and a per-task "vs base" column. CI
+   produces the baseline by re-running the same affected suite on the PR's base
+   ref (`.github/workflows/talos-evals.yml`, best-effort: a flaky baseline never
+   blocks the PR, the delta just doesn't render). The dual-grader comparison §3.3
+   makes the delta apples-to-apples — the **same grader** runs on base and on the
+   PR — so it is a true regression signal, not grader drift.
 
 3. **The nightly capability curve moves.** The capability suite (`--suite
    capability`, 11 tasks tagged today) is the hill being climbed; a genuine
@@ -506,9 +508,9 @@ riding a real artifact:
 Read end to end, the arc is: *prompt change → per-PR trials-aware regression
 deltas → nightly capability curve climbs → DORA throughput up with CFR flat.*
 That is the talk's actual punchline — **the dark factory is built (§0.1) AND its
-improvement is measured.** The arc is wired except for the two gaps flagged
-above (the baseline delta in the PR comment, and the nightly curve schedule);
-the per-PR comment, the trials-aware report, the harvest flywheel, and the drift
+improvement is measured.** The arc is wired except for the one gap flagged
+above — the nightly curve schedule (no cron yet); the per-PR comment, the
+trials-aware report, the **Δ-vs-base** view, the harvest flywheel, and the drift
 metric all exist today.
 
 ## 5. Anti-patterns explicitly avoided
