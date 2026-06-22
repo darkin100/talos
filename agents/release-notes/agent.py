@@ -24,7 +24,8 @@ Outputs:
 
 Exit code: 0 on success, 1 on failure.
 """
-
+# demo: trigger the Talos eval pipeline (safe to revert)
+# demo: trigger the Talos eval pipeline (safe to revert)
 from __future__ import annotations
 
 import os
