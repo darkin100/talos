@@ -1,0 +1,81 @@
+name: Talos Evals — Re-cast Ground Truth
+
+# Manually regenerate the committed ground-truth baseline that every PR's eval
+# run diffs against (evals/.baselines/ground-truth.json + its .meta.json
+# provenance sidecar). This is the deliberate, occasional "establish the
+# reference" job, decoupled from the per-PR "measure the change" job
+# (talos-evals.yml). Run it when the agents, datasets, grader, or the
+# underlying model have moved enough that the baseline no longer reflects
+# reality — the per-PR comment surfaces the cast date so you can tell when.
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "suite to cast (regression | capability | all)"
+        default: "regression"
+      trials:
+        description: "trials per task — match the per-PR run (3) for apples-to-apples deltas"
+        default: "3"
+
+permissions:
+  contents: write
+
+jobs:
+  recast:
+    runs-on: ubuntu-latest
+    # Casts the FULL suite (every replayable agent, no --agent filter), so give
+    # it more headroom than a single per-PR agent run.
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runner deps
+        run: pip install -r evals/requirements.txt
+
+      - name: Run full suite (all replayable agents)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          # No --agent filter: ground truth must cover every agent a PR might
+          # touch, so any affected suite can diff against it. report.py keys the
+          # diff by (agent, task), so over-covering here is harmless.
+          python -m pytest evals -v \
+            --suite "${{ github.event.inputs.suite }}" \
+            --trials "${{ github.event.inputs.trials }}"
+
+      - name: Promote results to ground truth
+        run: |
+          mkdir -p evals/.baselines
+          cp evals/.results/results.json evals/.baselines/ground-truth.json
+          # Provenance sidecar — report.py surfaces this in the PR comment so
+          # reviewers can see how fresh (and how comparable) the baseline is.
+          cat > evals/.baselines/ground-truth.meta.json <<EOF
+          {
+            "cast_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${GITHUB_SHA:0:7}",
+            "suite": "${{ github.event.inputs.suite }}",
+            "trials": ${{ github.event.inputs.trials }},
+            "run_id": "${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Commit ground truth
+        run: |
+          git config user.name  "talos-evals-bot"
+          git config user.email "talos-evals-bot@users.noreply.github.com"
+          git add evals/.baselines/ground-truth.json evals/.baselines/ground-truth.meta.json
+          if git diff --cached --quiet; then
+            echo "ground truth unchanged — nothing to commit"
+            exit 0
+          fi
+          git commit -m "evals: re-cast ground-truth baseline (${{ github.event.inputs.suite }}, ${{ github.event.inputs.trials }} trials) [skip ci]"
+          # NOTE: pushes straight to the triggering ref. If that branch is
+          # protected against direct pushes, switch this to open a PR instead
+          # (e.g. peter-evans/create-pull-request).
+          git push origin "HEAD:${GITHUB_REF_NAME}"
