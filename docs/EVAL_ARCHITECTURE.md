@@ -54,12 +54,17 @@ flowchart TB
   results[("results.json<br/>outcome · pass_rate k/N · detail")]
   majority --> results
 
-  baseline["Baseline run<br/>same suite on the PR's base ref"]
-  trigger -.-> baseline --> results
+  %% the baseline is NOT recomputed per-PR — it's a committed snapshot,
+  %% re-cast deliberately by a separate manual workflow.
+  recast["talos-evals-recast.yml (CI)<br/>on: workflow_dispatch (manual)<br/>re-runs full suite across all agents"]
+  groundtruth[("evals/.baselines/ground-truth.json<br/>committed reference + .meta.json provenance")]
+  datasets -.->|"all agents"| recast
+  recast -->|"commits"| groundtruth
 
-  report["report.py<br/>per-category · pass@1 + majority pass@3 · Δ vs base"]
-  comment["Sticky PR comment<br/>regressions callout · per-task vs-base"]
+  report["report.py<br/>per-category · pass@1 + majority pass@3 · Δ vs ground truth"]
+  comment["Sticky PR comment<br/>regressions callout · per-task vs-base · baseline freshness"]
   results --> report --> comment
+  groundtruth -.->|"--baseline (diffed by agent·task)"| report
 
   %% ---- the flywheel ----
   agentcall["agents call OpenRouter to reason<br/>+ emit OpenInference spans to Arize"]
@@ -69,7 +74,7 @@ flowchart TB
   classDef store fill:#fff3cd,stroke:#b8860b,color:#000;
   classDef person fill:#08427b,color:#fff,stroke:#052e56;
   classDef gate fill:#d4edda,stroke:#1f8a4c,color:#000;
-  class datasets,results store;
+  class datasets,results,groundtruth store;
   class maintainer person;
   class regression,capability gate;
   style RUN fill:#eef4fb,stroke:#08427b;
@@ -98,9 +103,22 @@ flowchart TB
    on a **strict majority** of its graded trials.
 4. **Results → report** — outcomes are written to `results.json`, and `report.py`
    renders the per-PR comment: per-category, both **pass@1** (trial-level) and
-   **majority pass@3** (task-level), and — when CI also runs the **baseline** on
-   the PR's base ref — the **Δ vs base** with a regressions callout.
-5. **The flywheel** — while running, agents emit traces to Arize; `harvest_arize.py`
+   **majority pass@3** (task-level), and the **Δ vs the committed ground-truth
+   baseline** (`evals/.baselines/ground-truth.json`) with a regressions callout.
+   The baseline is **not** recomputed per-PR — it's a committed snapshot diffed by
+   `(agent, task)`, so a PR only has to test the change, not re-test its base. Its
+   `.meta.json` provenance (cast date, commit, trials) is surfaced in the comment
+   so reviewers can judge freshness; once it drifts from the live grader/model,
+   the Δ reads as indicative.
+5. **Re-casting the baseline** — `talos-evals-recast.yml` is a manual
+   (`workflow_dispatch`) job that re-runs the **full suite across all agents** and
+   commits the result as the new ground truth. This decouples *establishing the
+   reference* (deliberate, occasional) from *measuring a change* (every PR), and
+   replaces the old per-PR base re-run that cost ~2× the work. Trade-off: that
+   back-to-back base run controlled for model/grader drift; re-casting often
+   enough keeps the drift small, and the comment's freshness line makes staleness
+   visible.
+6. **The flywheel** — while running, agents emit traces to Arize; `harvest_arize.py`
    feeds those back in as new tasks, so the suite grows from real usage.
 
 ## The one rule that makes the numbers trustworthy
