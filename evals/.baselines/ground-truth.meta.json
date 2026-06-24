@@ -1,7 +1,7 @@
 {
-  "cast_at": "2026-06-22T00:00:00Z",
-  "commit": "0854b9d",
+  "cast_at": "2026-06-24T09:24:22Z",
+  "commit": "47c67bd",
   "suite": "regression",
-  "trials": 1,
-  "note": "Seed snapshot copied from evals/.results/results.json (single-trial, code-review only). Run the talos-evals-recast workflow once to cast a full multi-trial ground truth across all agents."
+  "trials": 3,
+  "run_id": "28087334560"
 }

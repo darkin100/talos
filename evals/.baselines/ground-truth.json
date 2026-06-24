@@ -4,105 +4,330 @@
     "task": "cr-001",
     "category": "none",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'none' (exit 0)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'none' (exit 0) | trial 2: pass \u2014 verdict matches label category 'none' (exit 0) | trial 3: pass \u2014 verdict matches label category 'none' (exit 0)"
   },
   {
     "agent": "code-review",
     "task": "cr-006",
     "category": "style_only",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 2: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 3: pass \u2014 verdict matches label category 'style_only' (exit 0)"
   },
   {
     "agent": "code-review",
     "task": "cr-007",
     "category": "style_only",
     "outcome": "pass",
-    "pass_rate": "1/1",
-    "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+    "pass_rate": "2/2",
+    "infra_trials": 1,
+    "detail": "trial 1: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 2: pass \u2014 verdict matches label category 'style_only' (exit 0)"
   },
   {
     "agent": "code-review",
     "task": "cr-008",
     "category": "style_only",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 2: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 3: pass \u2014 verdict matches label category 'style_only' (exit 0)"
   },
   {
     "agent": "code-review",
     "task": "cr-009",
     "category": "style_only",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 2: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 3: pass \u2014 verdict matches label category 'style_only' (exit 0)"
   },
   {
     "agent": "code-review",
     "task": "cr-010",
     "category": "style_only",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'style_only' (exit 0)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 2: pass \u2014 verdict matches label category 'style_only' (exit 0) | trial 3: pass \u2014 verdict matches label category 'style_only' (exit 0)"
   },
   {
     "agent": "code-review",
     "task": "cr-011",
     "category": "real_defect",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'real_defect' (exit 1)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'real_defect' (exit 1) | trial 2: pass \u2014 verdict matches label category 'real_defect' (exit 1) | trial 3: pass \u2014 verdict matches label category 'real_defect' (exit 1)"
   },
   {
     "agent": "code-review",
     "task": "cr-012",
     "category": "real_defect",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'real_defect' (exit 1)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'real_defect' (exit 1) | trial 2: pass \u2014 verdict matches label category 'real_defect' (exit 1) | trial 3: pass \u2014 verdict matches label category 'real_defect' (exit 1)"
   },
   {
     "agent": "code-review",
     "task": "cr-013",
     "category": "real_defect",
     "outcome": "pass",
-    "pass_rate": "1/1",
-    "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'real_defect' (exit 1)"
+    "pass_rate": "2/2",
+    "infra_trials": 1,
+    "detail": "trial 1: pass \u2014 verdict matches label category 'real_defect' (exit 1) | trial 2: pass \u2014 verdict matches label category 'real_defect' (exit 1)"
   },
   {
     "agent": "code-review",
     "task": "cr-014",
     "category": "maintainability",
-    "outcome": "infra",
-    "detail": "infra signature: could not determine a code-review verdict"
+    "outcome": "pass",
+    "pass_rate": "2/2",
+    "infra_trials": 1,
+    "detail": "trial 1: pass \u2014 verdict matches label category 'maintainability' (exit 1) | trial 2: pass \u2014 verdict matches label category 'maintainability' (exit 1)"
   },
   {
     "agent": "code-review",
     "task": "cr-015",
     "category": "missing_test",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'missing_test' (exit 1)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'missing_test' (exit 1) | trial 2: pass \u2014 verdict matches label category 'missing_test' (exit 1) | trial 3: pass \u2014 verdict matches label category 'missing_test' (exit 1)"
   },
   {
     "agent": "code-review",
     "task": "cr-016",
     "category": "none",
     "outcome": "pass",
-    "pass_rate": "1/1",
+    "pass_rate": "3/3",
     "infra_trials": 0,
-    "detail": "trial 1: pass — verdict matches label category 'none' (exit 0)"
+    "detail": "trial 1: pass \u2014 verdict matches label category 'none' (exit 0) | trial 2: pass \u2014 verdict matches label category 'none' (exit 0) | trial 3: pass \u2014 verdict matches label category 'none' (exit 0)"
+  },
+  {
+    "agent": "contract-test",
+    "task": "ct-001",
+    "category": "",
+    "outcome": "infra",
+    "detail": "ct-001: historical trial, not replayable (no mutation.patch); ct-001: historical trial, not replayable (no mutation.patch); ct-001: historical trial, not replayable (no mutation.patch)"
+  },
+  {
+    "agent": "contract-test",
+    "task": "mut-001",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 killed mutant on POST /api/todos | trial 2: pass \u2014 killed mutant on POST /api/todos | trial 3: pass \u2014 killed mutant on POST /api/todos"
+  },
+  {
+    "agent": "contract-test",
+    "task": "mut-002",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 killed mutant on POST /api/todos | trial 2: pass \u2014 killed mutant on POST /api/todos | trial 3: pass \u2014 killed mutant on POST /api/todos"
+  },
+  {
+    "agent": "contract-test",
+    "task": "mut-003",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 killed mutant on GET /api/todos/search | trial 2: pass \u2014 killed mutant on GET /api/todos/search | trial 3: pass \u2014 killed mutant on GET /api/todos/search"
+  },
+  {
+    "agent": "rca",
+    "task": "clean-001",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 correctly silent on clean logs | trial 2: pass \u2014 correctly silent on clean logs | trial 3: pass \u2014 correctly silent on clean logs"
+  },
+  {
+    "agent": "rca",
+    "task": "clean-002",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 correctly silent on clean logs | trial 2: pass \u2014 correctly silent on clean logs | trial 3: pass \u2014 correctly silent on clean logs"
+  },
+  {
+    "agent": "rca",
+    "task": "dep0169-001",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 correctly silent on clean logs | trial 2: pass \u2014 correctly silent on clean logs | trial 3: pass \u2014 correctly silent on clean logs"
+  },
+  {
+    "agent": "rca",
+    "task": "incident-001",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 incident detected, diagnosis cites ['handleSearch', 'toLowerCase', 'handler.js'] | trial 2: pass \u2014 incident detected, diagnosis cites ['handleSearch', 'toLowerCase', 'handler.js'] | trial 3: pass \u2014 incident detected, diagnosis cites ['handleSearch', 'toLowerCase', 'handler.js']"
+  },
+  {
+    "agent": "rca",
+    "task": "incident-002",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 correctly silent on clean logs | trial 2: pass \u2014 correctly silent on clean logs | trial 3: pass \u2014 correctly silent on clean logs"
+  },
+  {
+    "agent": "rca",
+    "task": "incident-003",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 incident detected, diagnosis cites ['logging.js', 'logEvent', 'circular', 'handler.js'] | trial 2: pass \u2014 incident detected, diagnosis cites ['logging.js', 'logEvent', 'circular', 'handler.js'] | trial 3: pass \u2014 incident detected, diagnosis cites ['logging.js', 'logEvent', 'circular', 'handler.js']"
+  },
+  {
+    "agent": "release-notes",
+    "task": "rn-001",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 102 words, all references grounded | trial 2: pass \u2014 98 words, all references grounded | trial 3: pass \u2014 101 words, all references grounded"
+  },
+  {
+    "agent": "release-notes",
+    "task": "rn-002",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 146 words, all references grounded | trial 2: pass \u2014 148 words, all references grounded | trial 3: pass \u2014 142 words, all references grounded"
+  },
+  {
+    "agent": "release-notes",
+    "task": "rn-003",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 118 words, all references grounded | trial 2: pass \u2014 106 words, all references grounded | trial 3: pass \u2014 108 words, all references grounded"
+  },
+  {
+    "agent": "release-notes",
+    "task": "rn-004",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 102 words, all references grounded | trial 2: pass \u2014 111 words, all references grounded | trial 3: pass \u2014 121 words, all references grounded"
+  },
+  {
+    "agent": "release-notes",
+    "task": "rn-005",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 125 words, all references grounded | trial 2: pass \u2014 128 words, all references grounded | trial 3: pass \u2014 110 words, all references grounded"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-001",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (FAIL); CWE mention 0/3 (info only) | trial 2: pass \u2014 verdict matches (FAIL); CWE mention 0/3 (info only) | trial 3: pass \u2014 verdict matches (FAIL); CWE mention 0/3 (info only)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-002",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 2: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 3: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-003",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 2: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 3: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-004",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 2: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 3: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-005",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 2: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 3: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-006",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 2: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only) | trial 3: pass \u2014 verdict matches (FAIL); CWE mention 0/1 (info only)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-007",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (PASS) | trial 2: pass \u2014 verdict matches (PASS) | trial 3: pass \u2014 verdict matches (PASS)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-009",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (PASS) | trial 2: pass \u2014 verdict matches (PASS) | trial 3: pass \u2014 verdict matches (PASS)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-010",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (PASS) | trial 2: pass \u2014 verdict matches (PASS) | trial 3: pass \u2014 verdict matches (PASS)"
+  },
+  {
+    "agent": "security-review",
+    "task": "sec-011",
+    "category": "",
+    "outcome": "pass",
+    "pass_rate": "3/3",
+    "infra_trials": 0,
+    "detail": "trial 1: pass \u2014 verdict matches (PASS) | trial 2: pass \u2014 verdict matches (PASS) | trial 3: pass \u2014 verdict matches (PASS)"
   }
 ]
