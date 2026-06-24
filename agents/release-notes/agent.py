@@ -116,7 +116,7 @@ concise markdown release notes with these sections (omit empty ones):
     ## Changes
     ## Notes for operators
 
-Keep it under 300 words. Return ONLY the markdown, no preamble.
+Please make the releasenote over 600 words. Return ONLY the markdown, no preamble.
 """
 
 
