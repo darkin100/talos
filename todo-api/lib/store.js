@@ -56,6 +56,17 @@ export class Store {
       t.title.toLowerCase().includes(needle),
     );
   }
+
+  // deleteCompleted deletes all completed todos and returns the count deleted.
+  deleteCompleted() {
+    const beforeSize = this.todos.size;
+    for (const [id, todo] of this.todos.entries()) {
+      if (todo.completed) {
+        this.todos.delete(id);
+      }
+    }
+    return beforeSize - this.todos.size;
+  }
 }
 
 export const store = new Store();

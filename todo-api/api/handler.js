@@ -60,6 +60,18 @@ function handleTodos(req, res) {
     res.status(201).json(store.create(title));
     return 201;
   }
+  if (req.method === 'DELETE') {
+    // Only allow DELETE with completed=true filter
+    const completedParam = req.query && req.query.completed;
+    if (completedParam !== 'true') {
+      logEvent('error', 'delete without or with invalid filter', { status: 400, completed: completedParam });
+      res.status(400).json({ error: 'DELETE requires completed=true filter' });
+      return 400;
+    }
+    const deleted = store.deleteCompleted();
+    res.status(200).json({ deleted });
+    return 200;
+  }
   res.status(405).json({ error: 'method not allowed' });
   return 405;
 }

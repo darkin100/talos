@@ -60,3 +60,37 @@ test('update preserves completed when not provided in request', () => {
   assert.equal(updated.title, 'updated');
   assert.equal(updated.completed, true, 'completed should remain true');
 });
+
+test('deleteCompleted deletes all completed todos and returns count', () => {
+  const s = new Store();
+  s.create('Open 1');
+  s.create('Completed 1');
+  s.create('Open 2');
+  s.create('Completed 2');
+
+  // Mark todos 2 and 4 as completed
+  s.update(2, 'Completed 1', true);
+  s.update(4, 'Completed 2', true);
+
+  const deleted = s.deleteCompleted();
+  assert.equal(deleted, 2);
+  assert.equal(s.list().length, 2);
+  s.list().forEach(t => assert.equal(t.completed, false));
+});
+
+test('deleteCompleted returns 0 when no todos are completed', () => {
+  const s = new Store();
+  s.create('Open 1');
+  s.create('Open 2');
+
+  const deleted = s.deleteCompleted();
+  assert.equal(deleted, 0);
+  assert.equal(s.list().length, 2);
+});
+
+test('deleteCompleted returns 0 on empty store', () => {
+  const s = new Store();
+  const deleted = s.deleteCompleted();
+  assert.equal(deleted, 0);
+  assert.equal(s.list().length, 0);
+});
