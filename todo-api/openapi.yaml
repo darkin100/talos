@@ -83,6 +83,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      summary: Bulk-delete completed todos
+      parameters:
+        - in: query
+          name: completed
+          required: true
+          schema:
+            type: string
+            enum: ['true']
+          description: Must be set to 'true' to delete all completed todos (guard against accidental delete-all)
+      responses:
+        '200':
+          description: Todos deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '400':
+          description: Missing or invalid filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/todos/search:
     get:
@@ -205,6 +234,13 @@ components:
           type: boolean
         created_at:
           type: string
+    DeleteResponse:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: integer
+          description: Number of todos deleted
     Error:
       type: object
       required: [error]
