@@ -10,8 +10,17 @@
 // `/api/handler?slug=*`. The dev-server.js shim builds the same `slug`
 // value locally so both code paths agree.
 
-import { store } from '../lib/store.js';
+import { store, metrics } from '../lib/store.js';
 import { logEvent } from '../lib/logging.js';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+import { readFile } from 'fs/promises';
+
+// Read version from package.json at module load time (not per-request)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const packageJsonPath = resolve(__dirname, '../package.json');
+const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+const VERSION = packageJson.version;
 
 const MAX_TITLE_LENGTH = 500;
 
@@ -20,7 +29,12 @@ function handleHealthz(req, res) {
     res.status(405).json({ error: 'method not allowed' });
     return 405;
   }
-  res.status(200).json({ status: 'ok' });
+  res.status(200).json({
+    status: 'ok',
+    version: VERSION,
+    uptime_s: metrics.getMetrics().uptime_s,
+    todo_count: store.list().length,
+  });
   return 200;
 }
 
@@ -73,6 +87,15 @@ function handleSearch(req, res) {
   const rawQ = (req.query && req.query.q) || '';
   const q = String(rawQ).trim();
   res.status(200).json(store.search(q));
+  return 200;
+}
+
+function handleMetrics(req, res) {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'method not allowed' });
+    return 405;
+  }
+  res.status(200).json(metrics.getMetrics());
   return 200;
 }
 
@@ -143,6 +166,9 @@ export default function handler(req, res) {
   const path = '/api/' + slug.join('/');
   let status = 500;
 
+  // Wire request counting at the very start of handler()
+  metrics.incrementRequests();
+
   try {
     if (slug.length === 1 && slug[0] === 'healthz') {
       status = handleHealthz(req, res);
@@ -160,9 +186,17 @@ export default function handler(req, res) {
       status = handleTodoById(req, res, slug[1]);
       return;
     }
+    if (slug.length === 1 && slug[0] === 'metrics') {
+      status = handleMetrics(req, res);
+      return;
+    }
     status = 404;
     res.status(404).json({ error: 'not found' });
   } finally {
+    // Wire error counting for status >= 400
+    if (status >= 400) {
+      metrics.incrementErrors();
+    }
     logEvent('info', 'http_request', {
       method: req.method,
       path,

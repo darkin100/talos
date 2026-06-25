@@ -25,6 +25,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/metrics:
+    get:
+      summary: Application metrics
+      responses:
+        '200':
+          description: Metrics counters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /api/todos:
     get:
       summary: List todos
@@ -213,8 +230,33 @@ components:
           type: string
     HealthResponse:
       type: object
-      required: [status]
+      required: [status, version, uptime_s, todo_count]
       properties:
         status:
           type: string
           enum: [ok]
+        version:
+          type: string
+        uptime_s:
+          type: number
+          format: double
+        todo_count:
+          type: integer
+    MetricsResponse:
+      type: object
+      required: [requests, errors, todos_by_status, uptime_s]
+      properties:
+        requests:
+          type: integer
+        errors:
+          type: integer
+        todos_by_status:
+          type: object
+          properties:
+            open:
+              type: integer
+            completed:
+              type: integer
+        uptime_s:
+          type: number
+          format: double

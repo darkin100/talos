@@ -26,7 +26,13 @@ test('GET /api/healthz returns 200 ok', () => {
   const res = mockRes();
   handler({ method: 'GET', query: { slug: 'healthz' } }, res);
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, { status: 'ok' });
+  assert.equal(res.body.status, 'ok');
+  assert.equal(typeof res.body.version, 'string');
+  assert.ok(res.body.version.length > 0);
+  assert.equal(typeof res.body.uptime_s, 'number');
+  assert.ok(res.body.uptime_s >= 0);
+  assert.equal(typeof res.body.todo_count, 'number');
+  assert.ok(res.body.todo_count >= 0);
 });
 
 test('POST /api/healthz returns 405 (method guard)', () => {
@@ -215,4 +221,40 @@ test('GET /api/todos?completed=invalid returns 400', () => {
   );
   assert.equal(res.statusCode, 400);
   assert(res.body.error.includes('true') || res.body.error.includes('false'));
+});
+
+test('GET /api/healthz returns enriched payload', () => {
+  const res = mockRes();
+  handler({ method: 'GET', query: { slug: 'healthz' } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.status, 'ok');
+  assert(typeof res.body.version === 'string' && res.body.version.length > 0);
+  assert(typeof res.body.uptime_s === 'number' && res.body.uptime_s >= 0);
+  assert(typeof res.body.todo_count === 'number' && res.body.todo_count >= 0);
+});
+
+test('GET /api/metrics returns counters', () => {
+  const res = mockRes();
+  handler({ method: 'GET', query: { slug: 'metrics' } }, res);
+  assert.equal(res.statusCode, 200);
+  assert(typeof res.body.requests === 'number' && res.body.requests >= 1);
+  assert(typeof res.body.errors === 'number' && res.body.errors >= 0);
+  assert(typeof res.body.todos_by_status === 'object');
+  assert(typeof res.body.todos_by_status.open === 'number' && res.body.todos_by_status.open >= 0);
+  assert(typeof res.body.todos_by_status.completed === 'number' && res.body.todos_by_status.completed >= 0);
+  assert(typeof res.body.uptime_s === 'number' && res.body.uptime_s >= 0);
+});
+
+test('POST /api/metrics returns 405', () => {
+  const res = mockRes();
+  handler({ method: 'POST', query: { slug: 'metrics' } }, res);
+  assert.equal(res.statusCode, 405);
+  assert.deepEqual(res.body, { error: 'method not allowed' });
+});
+
+test('PUT /api/metrics returns 405', () => {
+  const res = mockRes();
+  handler({ method: 'PUT', query: { slug: 'metrics' } }, res);
+  assert.equal(res.statusCode, 405);
+  assert.deepEqual(res.body, { error: 'method not allowed' });
 });
