@@ -59,3 +59,43 @@ export class Store {
 }
 
 export const store = new Store();
+
+// Metrics tracking for the API
+const startTime = process.hrtime.bigint();
+
+export class Metrics {
+  constructor() {
+    this.requestCount = 0;
+    this.errorCount = 0;
+  }
+
+  incrementRequests() {
+    this.requestCount++;
+  }
+
+  incrementErrors() {
+    this.errorCount++;
+  }
+
+  getMetrics() {
+    // Calculate uptime in seconds
+    const uptimeNs = process.hrtime.bigint() - startTime;
+    const uptimeS = Number(uptimeNs) / 1e9;
+
+    // Get todo counts by status using existing store.list()
+    const todos = store.list();
+    const todosByStatus = {
+      open: todos.filter((t) => !t.completed).length,
+      completed: todos.filter((t) => t.completed).length,
+    };
+
+    return {
+      requests: this.requestCount,
+      errors: this.errorCount,
+      todos_by_status: todosByStatus,
+      uptime_s: uptimeS,
+    };
+  }
+}
+
+export const metrics = new Metrics();
